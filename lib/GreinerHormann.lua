@@ -4,7 +4,18 @@ local function xor(p, q)
 	return (p and not q) or (not p and q)
 end
 
+local function isArray(x)
+	if type(x) == "table" then
+		if x.x then
+			return false;
+		end
+		return true;
+	end
+	return false;
+end
+
 class "GreinerHormann"
+
 	function GreinerHormann:__init()
 
 	end
@@ -36,7 +47,7 @@ class "GreinerHormannPolygon"
 		self._arrayVertices = nil;
 
 		if not arrayVertices then
-			self._arrayVertices = type(p) == "table";
+			self._arrayVertices = isArray(p[1]);
 		else
 			self._arrayVertices = arrayVertices;
 		end
@@ -57,7 +68,7 @@ class "GreinerHormannPolygon"
 			local prev = nxt.prev;
 
 			next.prev = vertex;
-			vertex.next = next;
+			vertex.next = nxt;
 			vertex.prev = prev;
 			prev.next = vertex;
 		end
@@ -221,8 +232,8 @@ class "GreinerHormannPolygon"
 		local list = {};
 
 		while self:hasUnprocessed() do
-			local current = this:getFirstIntersect();
-			local clipped = GreinerHormannPolygon({}, this._arrayVertices);
+			local current = self:getFirstIntersect();
+			local clipped = GreinerHormannPolygon({}, self._arrayVertices);
 			clipped:addVertex(GreinerHormannVertex(current.x, current.y));
 
 			local bool5 = true;
@@ -266,10 +277,25 @@ class "GreinerHormannVertex"
 	
 	function GreinerHormannVertex:__init(x, y)
 
-	end
+		if not y then
+			if isArray(x) then
+				x = x[1];
+				y = x[2];
+			else
+				y = x.y;
+				x = x.x;
+			end
+		end
 
-	function GreinerHormannVertex:equals(v)
-		return self.x == v.x and self.y == v.y;
+		self.x = x;
+		self.y = y;
+		self.next = nil;
+		self.prev = nil;
+		self._corresponding = nil;
+		self._distance = 0.0;
+		self._isEntry = true;
+		self._isIntersection = false;
+		self._visited = false;
 	end
 
 	function GreinerHormannVertex.createIntersection(x, y, distance)
@@ -280,10 +306,58 @@ class "GreinerHormannVertex"
 		return vertex;
 	end
 
+	function GreinerHormannVertex:visit()
+		self._visited = true;
+		if self._corresponding ~= nil and not self._corresponding._visited then
+			self._corresponding:visit();
+		end
+	end
+
+	function GreinerHormannVertex:equals(v)
+		return self.x == v.x and self.y == v.y;
+	end
+
+	function GreinerHormannVertex:isInside(poly)
+		local oddNodes = false;
+		local vertex = poly.first;
+		local nxt = vertex.next;
+		local x = self.x;
+		local y = self.y;
+
+		local bool = true;
+		while bool or (not vertex:equals(poly.first)) do
+			if (vertex.y < y and nxt.y >= y or nxt.y < y and vertex.y >= y) and (vertex.x <= x or nxt.x <= x) then
+				oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (next.y - vertex.y) * (next.x - vertex.x) < x));
+			end
+			vertex = vertex.next;
+			nxt = vertex.next and vertex.next or poly.first;
+			bool = false;
+		end
+
+		return oddNodes;
+	end
+
 class "GreinerHormannIntersection"
 
 	function GreinerHormannIntersection:__init(s1, s2, c1, c2)
-		-- body
+		self.x = 0.0;
+		self.y = 0.0;
+		self.toSource = 0.0;
+		self.toClip = 0.0;
+
+		local d = (c2.y - c1.y) * (s2.x - s1.x) - (c2.x - c1.x) * (s2.y - s1.y);
+
+		if d == 0 then
+			return;
+		end
+
+		self.toSource = ((c2.x - c1.x) * (s1.y - c1.y) - (c2.y - c1.y) * (s1.x - c1.x)) / d;
+		self.toClip = ((s2.x - s1.x) * (s1.y - c1.y) - (s2.y - s1.y) * (s1.x - c1.x)) / d;
+
+		if self:valid() then
+			self.x = s1.x + self.toSource * (s2.x - s1.x);
+			self.y = s1.y + self.toSource * (s2.y - s1.y);
+		end
 	end
 
 	function GreinerHormannIntersection:valid()
