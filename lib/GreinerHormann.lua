@@ -1,7 +1,7 @@
 -- Source: https://github.com/w8r/GreinerHormann
 
 local function xor(p, q)
-	return (p and not q) or (not p and q)
+	return (p and not q) or (not p and q);
 end
 
 local function isArray(x)
@@ -12,6 +12,15 @@ local function isArray(x)
 		return true;
 	end
 	return false;
+end
+
+local function doWhile(condition, statement)
+	local bool = true;
+
+	while bool or condition() do
+		statement();
+		bool = false;
+	end
 end
 
 class "GreinerHormann"
@@ -52,7 +61,6 @@ class "GreinerHormannPolygon"
 			self._arrayVertices = arrayVertices;
 		end
 
-		-- TODO: Check
 		for i, point in ipairs(p) do
 			self:addVertex(GreinerHormannVertex(point));
 		end
@@ -103,7 +111,6 @@ class "GreinerHormannPolygon"
 
 	function GreinerHormannPolygon:getFirstIntersect()
 		local v = self._firstIntersect and self._firstIntersect or self.first;
-
 		local bool = true;
 		while bool or (not v:equals(self.first)) do
 			if v._isIntersection and not v._visited then
@@ -120,14 +127,16 @@ class "GreinerHormannPolygon"
 	function GreinerHormannPolygon:hasUnprocessed()
 		local v = self._lastUnprocessed and self._lastUnprocessed or self.first;
 
-		local bool = true;
-		while bool or (not v:equals(self.first)) do
+
+		doWhile(
+			function() return not v:equals(self.first) end,
+			function()
 			if v._isIntersection and not v._visited then
 				self._lastUnprocessed = v;
 				return true;
 			end
-			bool = false;
-		end
+			end
+		);
 
 		self._lastUnprocessed = nil;
 		return false;
@@ -138,25 +147,29 @@ class "GreinerHormannPolygon"
 		local v = self.first;
 
 		if self._arrayVertices then
-			local bool = true;
-			while bool or (v ~= self.first) do
-				local t = {};
-				table.insert(t, v.x);
-				table.insert(t, v.y);
-				table.insert(points, t)
-				v = v.next;
-				bool = false;
-			end
+			doWhile(
+				function() return v ~= self.first end,
+				function()
+					local t = {};
+					table.insert(t, v.x);
+					table.insert(t, v.y);
+					table.insert(t, v.z);
+					table.insert(points, t)
+					v = v.next;
+				end
+			);
 		else
-			local bool = true;
-			while bool or (v ~= self.first)	 do
-				table.insert(points, {
-					x = v.x,
-					y = v.y
-				})
-				v = v.next;
-				bool = false;
-			end
+			doWhile(
+				function() return v ~= self.first end,
+				function()
+					table.insert(points, {
+						x = v.x,
+						y = v.y,
+						z = v.z
+					});
+					v = v.next;
+				end
+			);
 		end
 		return points;
 	end
@@ -167,39 +180,43 @@ class "GreinerHormannPolygon"
 		local sourceInClip = nil;
 		local clipInSource = nil;
 
-		local bool1 = true;
-		while bool1 or (not sourceVertex:equals(self.first)) do
-			if not sourceVertex._isIntersection then
-				local bool2 = true;
-				while bool2 or (not sourceVertex:equals(clip.first)) do
-					if not clipVertex._isIntersection then
-						local i = GreinerHormannIntersection(sourceVertex, self:getNext(sourceVertex.next), clipVertex, clip:getNext(clipVertex.next));
-						if i:valid() then
-							local sourceIntersection = GreinerHormannVertex.createIntersection(i.x, i.y, i.toSource);	
-							local clipIntersection = GreinerHormannVertex.createIntersection(i.x, i.y, i.toClip);
 
-							sourceIntersection._corresponding = clipIntersection;
-							clipIntersection._corresponding = sourceIntersection;
+		doWhile(
+			function() return not sourceVertex:equals(self.first) end,
+			function()
+				if not sourceVertex._isIntersection then
+					doWhile(
+						function() return not sourceVertex:equals(clip.first) end,
+						function()
+							if not clipVertex._isIntersection then
+								local i = GreinerHormannIntersection(sourceVertex, self:getNext(sourceVertex.next), clipVertex, clip:getNext(clipVertex.next));
+								if i:valid() then
+									local sourceIntersection = GreinerHormannVertex.createIntersection(i.x, i.y, i.z, i.toSource);
+									local clipIntersection = GreinerHormannVertex.createIntersection(i.x, i.y, i.z, i.toClip);
 
-							self:insertVertex(
-								sourceIntersection,
-								sourceVertex,
-								self:getNext(sourceVertex.next));
+									sourceIntersection._corresponding = clipIntersection;
+									clipIntersection._corresponding = sourceIntersection;
 
-							clip:insertVertex(
-								clipIntersection,
-								clipVertex,
-								clip:getNext(clipVertex.next));
+									self:insertVertex(
+										sourceIntersection,
+										sourceVertex,
+										self:getNext(sourceVertex.next));
+
+									clip:insertVertex(
+										clipIntersection,
+										clipVertex,
+										clip:getNext(clipVertex.next));
+								end
+							end
+							clipVertex = clipVertex.next;
 						end
-					end
-					clipVertex = clipVertex.next;
-					bool2 = false;
+					);
 				end
-			end
 
-			sourceVertex = sourceVertex.next;
-			bool1 = false;
-		end
+				sourceVertex = sourceVertex.next;
+			end
+		);
+
 		sourceVertex = self.first;
 		clipVertex = clip.first;
 
@@ -209,53 +226,58 @@ class "GreinerHormannPolygon"
 		sourceForwards = xor(sourceForwards, sourceInClip);
 		clipForwards = xor(clipForwards, clipInSource);
 
-		local bool3 = true;
-		while bool3 or (not sourceVertex:equals(self.first)) do
-			if sourceVertex._isIntersection then
-				sourceVertex._isEntry = sourceForwards;
-				sourceForwards = not sourceForwards;
+		doWhile(
+			function() return not sourceVertex:equals(self.first) end,
+			function()
+				if sourceVertex._isIntersection then
+					sourceVertex._isEntry = sourceForwards;
+					sourceForwards = not sourceForwards;
+				end
+				sourceVertex = sourceVertex.next;
 			end
-			sourceVertex = sourceVertex.next;
-			bool3 = false;
-		end
+		);
 
-		local bool4 = true;
-		while bool4 or (not clipVertex:equals(clip.first)) do
-			if clipVertex._isIntersection then
-				clipVertex._isEntry = clipForwards;
-				clipForwards = not clipForwards;
+		doWhile(
+			function() return not clipVertex:equals(clip.first) end,
+			function()
+				if clipVertex._isIntersection then
+					clipVertex._isEntry = clipForwards;
+					clipForwards = not clipForwards;
+				end
+				clipVertex = clipVertex.next;
 			end
-			clipVertex = clipVertex.next;
-			bool4 = false;
-		end
+		);
 
 		local list = {};
 
 		while self:hasUnprocessed() do
 			local current = self:getFirstIntersect();
 			local clipped = GreinerHormannPolygon({}, self._arrayVertices);
-			clipped:addVertex(GreinerHormannVertex(current.x, current.y));
+			clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
 
-			local bool5 = true;
-			while bool5 or (not current._visited) do
-				current:visit();
-				if current._isEntry then
-					local bool6 = true;
-					while bool6 or (not current._isIntersection) do
-						current = current.next;
-						clipped:addVertex(GreinerHormannVertex(current.x, current.y));
-						bool6 = false;
-					end
-				else
-					local bool7 = true;
-					while bool7 or (not current._isIntersection) do
-						current = current.prev;
-						clipped:addVertex(GreinerHormannVertex(current.x, current.y));
-						bool7 = false;
+			doWhile(
+				function() return not current._visited end,
+				function()
+					current:visit();
+					if current._isEntry then
+						doWhile(
+							function() return not current._isIntersection end,
+							function()
+								current = current.next;
+								clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
+							end
+						);
+					else
+						doWhile(
+							function() return not current._isIntersection end,
+							function()
+								current = current.prev;
+								clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
+							end
+						);
 					end
 				end
-				bool5 = false;
-			end
+			);
 			table.insert(list, clipped:getPoints());
 		end
 
@@ -275,13 +297,15 @@ class "GreinerHormannPolygon"
 
 class "GreinerHormannVertex"
 	
-	function GreinerHormannVertex:__init(x, y)
+	function GreinerHormannVertex:__init(x, y, z)
 
 		if not y then
 			if isArray(x) then
 				x = x[1];
 				y = x[2];
+				z = x[3];
 			else
+				z = x.z;
 				y = x.y;
 				x = x.x;
 			end
@@ -289,6 +313,7 @@ class "GreinerHormannVertex"
 
 		self.x = x;
 		self.y = y;
+		self.z = z;
 		self.next = nil;
 		self.prev = nil;
 		self._corresponding = nil;
@@ -298,8 +323,8 @@ class "GreinerHormannVertex"
 		self._visited = false;
 	end
 
-	function GreinerHormannVertex.createIntersection(x, y, distance)
-		local vertex = GreinerHormannVertex(x, y);
+	function GreinerHormannVertex.createIntersection(x, y, z, distance)
+		local vertex = GreinerHormannVertex(x, y, z);
 		vertex._distance = distance;
 		vertex._isIntersection = true;
 		vertex._isEntry = false;
@@ -324,15 +349,16 @@ class "GreinerHormannVertex"
 		local x = self.x;
 		local y = self.y;
 
-		local bool = true;
-		while bool or (not vertex:equals(poly.first)) do
-			if (vertex.y < y and nxt.y >= y or nxt.y < y and vertex.y >= y) and (vertex.x <= x or nxt.x <= x) then
-				oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (next.y - vertex.y) * (next.x - vertex.x) < x));
+		doWhile(
+			function() return not vertex:equals(poly.first) end,
+			function()
+				if (vertex.y < y and nxt.y >= y or nxt.y < y and vertex.y >= y) and (vertex.x <= x or nxt.x <= x) then
+					oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (next.y - vertex.y) * (next.x - vertex.x) < x));
+				end
+				vertex = vertex.next;
+				nxt = vertex.next and vertex.next or poly.first;
 			end
-			vertex = vertex.next;
-			nxt = vertex.next and vertex.next or poly.first;
-			bool = false;
-		end
+		);
 
 		return oddNodes;
 	end
@@ -342,6 +368,10 @@ class "GreinerHormannIntersection"
 	function GreinerHormannIntersection:__init(s1, s2, c1, c2)
 		self.x = 0.0;
 		self.y = 0.0;
+		self.z = 0.0;
+		if s1.z and s2.z and c1.z and c2.z then
+			self.z = (s1.z + s2.z + c1.z + c2.z) / 4;
+		end
 		self.toSource = 0.0;
 		self.toClip = 0.0;
 
