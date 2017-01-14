@@ -1,4 +1,12 @@
 -- Source: https://github.com/w8r/GreinerHormann
+--[[
+        Greiner Hormann Algorithm for Clipping Polygons
+        Credits to Alexander Milevski (https://github.com/w8r/GreinerHormann)
+
+    0.1 release
+--]]
+
+_G.GreinerHormannVersion = 0.1;
 
 local function xor(p, q)
 	return (p and not q) or (not p and q);
@@ -28,19 +36,41 @@ class "GreinerHormann"
 	function GreinerHormann:__init()
 
 	end
-
+    --[[
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonA
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonB
+		@return {Array.<Array.<Number>>|Array.<Array.<Object>|Null}
+    --]]
 	function GreinerHormann:union(polygonA, polygonB)
 		return self:clip(polygonA, polygonB, false, false);
 	end
 
+    --[[
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonA
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonB
+		@return {Array.<Array.<Number>>|Array.<Array.<Object>>|Null}
+    --]]
 	function GreinerHormann:intersection(polygonA, polygonB)
 		return self:clip(polygonA, polygonB, true, true);
 	end
 
+    --[[
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonA
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonB
+		@return {Array.<Array.<Number>>|Array.<Array.<Object>>|Null}
+    --]]
 	function GreinerHormann:diff(polygonA, polygonB)
 		return self:clip(polygonA, polygonB, false, true);
 	end
 
+    --[[
+		@param  {Array.<Array.<Number>|Array.<Object>} polygonA
+		@param  {Array.<Array.<Number>>} polygonA
+		@param  {Array.<Array.<Number>>} polygonB
+		@param  {Boolean}                sourceForwards
+		@param  {Boolean}                clipForwards
+		@return {Array.<Array.<Number>>}
+    --]]
 	function GreinerHormann:clip(polygonA, polygonB, eA, eB)
 		local source = GreinerHormannPolygon(polygonA);
 		local clip = GreinerHormannPolygon(polygonB);
@@ -49,6 +79,13 @@ class "GreinerHormann"
 
 class "GreinerHormannPolygon"
 
+    --[[
+		Polygon representation
+		@param {Array.<Array.<Number>>} p
+		@param {Boolean=}               arrayVertices
+		
+		@constructor
+    --]]
 	function GreinerHormannPolygon:__init(p, arrayVertices)
 		self.first = nil;
 		self.vertices = 0;
@@ -66,6 +103,12 @@ class "GreinerHormannPolygon"
 		end
 	end
 
+    --[[
+		Add a vertex object to the polygon
+		(vertex is added at the 'end' of the list')
+		
+		@param vertex
+    --]]
 	function GreinerHormannPolygon:addVertex(vertex)
 		if self.first == nil then
 			self.first = vertex;
@@ -83,6 +126,13 @@ class "GreinerHormannPolygon"
 		self.vertices = self.vertices + 1;
 	end
 
+    --[[
+		Inserts a vertex inbetween start and end
+		
+		@param {Vertex} vertex
+		@param {Vertex} start
+		@param {Vertex} end
+    --]]
 	function GreinerHormannPolygon:insertVertex(vertex, start, end1)
 		local prev = start;
 		local curr = start;
@@ -101,6 +151,11 @@ class "GreinerHormannPolygon"
 		self.vertices = self.vertices + 1;
 	end
 
+    --[[
+		Get next non-intersection point
+		@param  {Vertex} v
+		@return {Vertex}
+    --]]
 	function GreinerHormannPolygon:getNext(v)
 		local c = v;
 		while c._isIntersection do
@@ -109,6 +164,10 @@ class "GreinerHormannPolygon"
 		return c;
 	end
 
+    --[[
+		Unvisited intersection
+		@return {Vertex}
+    --]]
 	function GreinerHormannPolygon:getFirstIntersect()
 		local v = self._firstIntersect and self._firstIntersect or self.first;
 		local bool = true;
@@ -124,6 +183,10 @@ class "GreinerHormannPolygon"
 		return v;
 	end
 
+    --[[
+		Does the polygon have unvisited vertices
+		@return {Boolean} [description]
+    --]]
 	function GreinerHormannPolygon:hasUnprocessed()
 		local v = self._lastUnprocessed and self._lastUnprocessed or self.first;
 
@@ -142,6 +205,10 @@ class "GreinerHormannPolygon"
 		return false;
 	end
 
+    --[[
+		The output depends on what you put in, arrays or objects
+		@return {Array.<Array<Number>|Array.<Object>}
+    --]]
 	function GreinerHormannPolygon:getPoints()
 		local points = {};
 		local v = self.first;
@@ -174,13 +241,25 @@ class "GreinerHormannPolygon"
 		return points;
 	end
 
+    --[[
+		Clip polygon against another one.
+		Result depends on algorithm direction:
+		
+		Intersection: forwards forwards
+		Union:        backwars backwards
+		Diff:         backwards forwards
+		
+		@param {Polygon} clip
+		@param {Boolean} sourceForwards
+		@param {Boolean} clipForwards
+    --]]
 	function GreinerHormannPolygon:clip(clip, sourceForwards, clipForwards)
 		local sourceVertex = self.first;
 		local clipVertex = clip.first;
 		local sourceInClip = nil;
 		local clipInSource = nil;
 
-
+		-- calculate and mark intersections
 		doWhile(
 			function() return not sourceVertex:equals(self.first) end,
 			function()
@@ -217,6 +296,7 @@ class "GreinerHormannPolygon"
 			end
 		);
 
+		-- phase two - identify entry/exit points
 		sourceVertex = self.first;
 		clipVertex = clip.first;
 
@@ -248,10 +328,12 @@ class "GreinerHormannPolygon"
 			end
 		);
 
+		-- phase three - construct a list of clipped polygons
 		local list = {};
 
 		while self:hasUnprocessed() do
 			local current = self:getFirstIntersect();
+			-- keep format
 			local clipped = GreinerHormannPolygon({}, self._arrayVertices);
 			clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
 
@@ -296,10 +378,19 @@ class "GreinerHormannPolygon"
 	end
 
 class "GreinerHormannVertex"
-	
+
+	--[[
+		Vertex representation
+		
+		@param {Number|Array.<Number>} x
+		@param {Number=}               y
+		
+		@constructor
+    --]]
 	function GreinerHormannVertex:__init(x, y, z)
 
 		if not y then
+			-- Coords
 			if isArray(x) then
 				x = x[1];
 				y = x[2];
@@ -323,6 +414,13 @@ class "GreinerHormannVertex"
 		self._visited = false;
 	end
 
+	--[[
+		Creates intersection vertex
+		@param  {Number} x
+		@param  {Number} y
+		@param  {Number} distance
+		@return {Vertex}
+    --]]
 	function GreinerHormannVertex.createIntersection(x, y, z, distance)
 		local vertex = GreinerHormannVertex(x, y, z);
 		vertex._distance = distance;
@@ -331,6 +429,9 @@ class "GreinerHormannVertex"
 		return vertex;
 	end
 
+	--[[
+		Mark as visited
+    --]]
 	function GreinerHormannVertex:visit()
 		self._visited = true;
 		if self._corresponding ~= nil and not self._corresponding._visited then
@@ -338,10 +439,20 @@ class "GreinerHormannVertex"
 		end
 	end
 
+	--[[
+		Convenience
+    --]]
 	function GreinerHormannVertex:equals(v)
 		return self.x == v.x and self.y == v.y;
 	end
 
+	--[[
+		Check if vertex is inside a polygon by odd-even rule:
+		If the number of intersections of a ray out of the point and polygon
+		segments is odd - the point is inside.
+		@param {Polygon} poly
+		@return {Boolean}
+    --]]
 	function GreinerHormannVertex:isInside(poly)
 		local oddNodes = false;
 		local vertex = poly.first;
@@ -365,6 +476,14 @@ class "GreinerHormannVertex"
 
 class "GreinerHormannIntersection"
 
+	--[[
+		Intersection
+		@param {Vertex} s1
+		@param {Vertex} s2
+		@param {Vertex} c1
+		@param {Vertex} c2
+		@constructor
+    --]]
 	function GreinerHormannIntersection:__init(s1, s2, c1, c2)
 		self.x = 0.0;
 		self.y = 0.0;
@@ -390,6 +509,9 @@ class "GreinerHormannIntersection"
 		end
 	end
 
+	--[[
+		@return {Boolean}
+    --]]
 	function GreinerHormannIntersection:valid()
 		return (0 < self.toSource and self.toSource < 1) and (0 < self.toClip and self.toClip < 1);
 	end
