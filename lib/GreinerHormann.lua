@@ -134,10 +134,10 @@ class "GreinerHormannPolygon"
 		@param {Vertex} end
     --]]
 	function GreinerHormannPolygon:insertVertex(vertex, start, end1)
-		local prev = start;
+		local prev = nil;
 		local curr = start;
 
-		while not curr:equals(end1) and curr._distance < vertex._distance do
+		while (not curr:equals(end1)) and curr._distance < vertex._distance do
 			curr = curr.next;
 		end
 
@@ -170,6 +170,7 @@ class "GreinerHormannPolygon"
     --]]
 	function GreinerHormannPolygon:getFirstIntersect()
 		local v = self._firstIntersect and self._firstIntersect or self.first;
+
 		local bool = true;
 		while bool or (not v:equals(self.first)) do
 			if v._isIntersection and not v._visited then
@@ -190,16 +191,14 @@ class "GreinerHormannPolygon"
 	function GreinerHormannPolygon:hasUnprocessed()
 		local v = self._lastUnprocessed and self._lastUnprocessed or self.first;
 
-
-		doWhile(
-			function() return not v:equals(self.first) end,
-			function()
+		local bool = true;
+		while bool or (not v:equals(self.first)) do
 			if v._isIntersection and not v._visited then
 				self._lastUnprocessed = v;
 				return true;
 			end
-			end
-		);
+			bool = false;
+		end
 
 		self._lastUnprocessed = nil;
 		return false;
