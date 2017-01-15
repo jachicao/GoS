@@ -13,13 +13,10 @@ local function xor(p, q)
 end
 
 local function isArray(x)
-	if type(x) == "table" then
-		if x.x then
-			return false;
-		end
-		return true;
+	if x.x ~= nil then
+		return false;
 	end
-	return false;
+	return x[1] ~= nil;
 end
 
 local function doWhile(condition, statement)
@@ -115,11 +112,11 @@ class "GreinerHormannPolygon"
 			self.first.next = vertex;
 			self.first.prev = vertex;
 		else
-			local nxt = self.first;
-			local prev = nxt.prev;
+			local Next = self.first;
+			local prev = Next.prev;
 
-			next.prev = vertex;
-			vertex.next = nxt;
+			Next.prev = vertex;
+			vertex.next = Next;
 			vertex.prev = prev;
 			prev.next = vertex;
 		end
@@ -264,7 +261,7 @@ class "GreinerHormannPolygon"
 			function()
 				if not sourceVertex._isIntersection then
 					doWhile(
-						function() return not sourceVertex:equals(clip.first) end,
+						function() return not clipVertex:equals(clip.first) end,
 						function()
 							if not clipVertex._isIntersection then
 								local i = GreinerHormannIntersection(sourceVertex, self:getNext(sourceVertex.next), clipVertex, clip:getNext(clipVertex.next));
@@ -374,6 +371,7 @@ class "GreinerHormannPolygon"
 			end
 		end
 		return list;
+
 	end
 
 class "GreinerHormannVertex"
@@ -455,18 +453,18 @@ class "GreinerHormannVertex"
 	function GreinerHormannVertex:isInside(poly)
 		local oddNodes = false;
 		local vertex = poly.first;
-		local nxt = vertex.next;
+		local Next = vertex.next;
 		local x = self.x;
 		local y = self.y;
 
 		doWhile(
 			function() return not vertex:equals(poly.first) end,
 			function()
-				if (vertex.y < y and nxt.y >= y or nxt.y < y and vertex.y >= y) and (vertex.x <= x or nxt.x <= x) then
-					oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (next.y - vertex.y) * (next.x - vertex.x) < x));
+				if (vertex.y < y and Next.y >= y or Next.y < y and vertex.y >= y) and (vertex.x <= x or Next.x <= x) then
+					oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (Next.y - vertex.y) * (Next.x - vertex.x) < x));
 				end
 				vertex = vertex.next;
-				nxt = vertex.next and vertex.next or poly.first;
+				Next = vertex.next and vertex.next or poly.first;
 			end
 		);
 
