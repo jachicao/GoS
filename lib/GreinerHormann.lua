@@ -13,18 +13,21 @@ local function xor(p, q)
 end
 
 local function isArray(x)
-	if x.x ~= nil then
-		return false;
+	if x then
+		if x.x ~= nil then
+			return false;
+		end
+		return x[1] ~= nil;
 	end
-	return x[1] ~= nil;
+	return false;
 end
 
 local function doWhile(condition, statement)
 	local bool = true;
 
 	while bool or condition() do
-		statement();
 		bool = false;
+		statement();
 	end
 end
 
@@ -87,13 +90,7 @@ class "GreinerHormannPolygon"
 		self.first = nil;
 		self.vertices = 0;
 		self._lastUnprocessed = nil;
-		self._arrayVertices = nil;
-
-		if not arrayVertices then
-			self._arrayVertices = isArray(p[1]);
-		else
-			self._arrayVertices = arrayVertices;
-		end
+		self._arrayVertices = arrayVertices == nil and isArray(p[1]) or arrayVertices;
 
 		for i, point in ipairs(p) do
 			self:addVertex(GreinerHormannVertex(point));
@@ -130,11 +127,11 @@ class "GreinerHormannPolygon"
 		@param {Vertex} start
 		@param {Vertex} end
     --]]
-	function GreinerHormannPolygon:insertVertex(vertex, start, end1)
+	function GreinerHormannPolygon:insertVertex(vertex, start, End)
 		local prev = nil;
 		local curr = start;
 
-		while (not curr:equals(end1)) and curr._distance < vertex._distance do
+		while (not curr:equals(End)) and curr._distance < vertex._distance do
 			curr = curr.next;
 		end
 
@@ -166,15 +163,16 @@ class "GreinerHormannPolygon"
 		@return {Vertex}
     --]]
 	function GreinerHormannPolygon:getFirstIntersect()
-		local v = self._firstIntersect and self._firstIntersect or self.first;
+		local v = self._firstIntersect ~= nil and self._firstIntersect or self.first;
 
 		local bool = true;
 		while bool or (not v:equals(self.first)) do
+			bool = false;
+
 			if v._isIntersection and not v._visited then
 				break;
 			end
 			v = v.next;
-			bool = false;
 		end
 
 		self._firstIntersect = v;
@@ -186,15 +184,18 @@ class "GreinerHormannPolygon"
 		@return {Boolean} [description]
     --]]
 	function GreinerHormannPolygon:hasUnprocessed()
-		local v = self._lastUnprocessed and self._lastUnprocessed or self.first;
+		local v = self._lastUnprocessed ~= nil and self._lastUnprocessed or self.first;
 
 		local bool = true;
 		while bool or (not v:equals(self.first)) do
+			bool = false;
+
 			if v._isIntersection and not v._visited then
 				self._lastUnprocessed = v;
 				return true;
 			end
-			bool = false;
+
+			v = v.next;
 		end
 
 		self._lastUnprocessed = nil;
@@ -217,7 +218,7 @@ class "GreinerHormannPolygon"
 					table.insert(t, v.x);
 					table.insert(t, v.y);
 					table.insert(t, v.z);
-					table.insert(points, t)
+					table.insert(points, t);
 					v = v.next;
 				end
 			);
@@ -331,8 +332,8 @@ class "GreinerHormannPolygon"
 			local current = self:getFirstIntersect();
 			-- keep format
 			local clipped = GreinerHormannPolygon({}, self._arrayVertices);
-			clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
 
+			clipped:addVertex(GreinerHormannVertex(current.x, current.y, current.z));
 			doWhile(
 				function() return not current._visited end,
 				function()
@@ -460,11 +461,11 @@ class "GreinerHormannVertex"
 		doWhile(
 			function() return not vertex:equals(poly.first) end,
 			function()
-				if (vertex.y < y and Next.y >= y or Next.y < y and vertex.y >= y) and (vertex.x <= x or Next.x <= x) then
+				if ((vertex.y < y and Next.y >= y) or (Next.y < y and vertex.y >= y)) and (vertex.x <= x or Next.x <= x) then
 					oddNodes = xor(oddNodes, (vertex.x + (y - vertex.y) / (Next.y - vertex.y) * (Next.x - vertex.x) < x));
 				end
 				vertex = vertex.next;
-				Next = vertex.next and vertex.next or poly.first;
+				Next = vertex.next ~= nil and vertex.next or poly.first;
 			end
 		);
 
@@ -498,6 +499,7 @@ class "GreinerHormannIntersection"
 		end
 
 		self.toSource = ((c2.x - c1.x) * (s1.y - c1.y) - (c2.y - c1.y) * (s1.x - c1.x)) / d;
+
 		self.toClip = ((s2.x - s1.x) * (s1.y - c1.y) - (s2.y - s1.y) * (s1.x - c1.x)) / d;
 
 		if self:valid() then
