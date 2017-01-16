@@ -90,7 +90,12 @@ class "GreinerHormannPolygon"
 		self.first = nil;
 		self.vertices = 0;
 		self._lastUnprocessed = nil;
-		self._arrayVertices = arrayVertices == nil and isArray(p[1]) or arrayVertices;
+		self._arrayVertices = false;
+		if arrayVertices == nil then
+		 	self._arrayVertices = isArray(p[1]);
+		else
+			self._arrayVertices = arrayVertices;
+		end
 
 		for i, point in ipairs(p) do
 			self:addVertex(GreinerHormannVertex(point));
@@ -355,6 +360,7 @@ class "GreinerHormannPolygon"
 							end
 						);
 					end
+					current = current._corresponding;
 				end
 			);
 			table.insert(list, clipped:getPoints());
@@ -499,7 +505,7 @@ class "GreinerHormannIntersection"
 		end
 
 		self.toSource = ((c2.x - c1.x) * (s1.y - c1.y) - (c2.y - c1.y) * (s1.x - c1.x)) / d;
-
+		
 		self.toClip = ((s2.x - s1.x) * (s1.y - c1.y) - (s2.y - s1.y) * (s1.x - c1.x)) / d;
 
 		if self:valid() then
