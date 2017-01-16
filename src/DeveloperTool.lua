@@ -5,6 +5,7 @@ menu:MenuElement({ id = "attackData", name = "attackData", value = false });
 menu:MenuElement({ id = "missileData", name = "missileData", value = false });
 menu:MenuElement({ id = "spellData", name = "spellData", value = false });
 menu:MenuElement({ id = "buff", name = "buff", value = false });
+menu:MenuElement({ id = "particles", name = "particles", value = false });
 
 
 local function isObj_AI_Base(obj)
@@ -97,16 +98,19 @@ Callback.Add('Load',
 	function()
 		local Obj_AI_Bases = {};
 		local Missiles = {};
+		local Particles = {};
 		Callback.Add('Tick', function()
 			Obj_AI_Bases = {};
 			handleToNetworkID = {};
 			for i = 1, Game.ObjectCount() do
 				local obj = Game.Object(i);
-				if isValidTarget(obj) and isObj_AI_Base(obj) then
-					if isOnScreen(obj) then
-						table.insert(Obj_AI_Bases, obj);
+				if isValidTarget(obj) then
+					if isObj_AI_Base(obj) then
+						if isOnScreen(obj) then -- just because of fps
+							table.insert(Obj_AI_Bases, obj);
+						end
+						handleToNetworkID[obj.handle] = obj.networkID;
 					end
-					handleToNetworkID[obj.handle] = obj.networkID;
 				end
 			end
 
@@ -115,6 +119,16 @@ Callback.Add('Load',
 				local missile = Game.Missile(i);
 				if isValidMissile(missile) then
 					table.insert(Missiles, missile);
+				end
+			end
+
+			Particles = {};
+			for i = 1, Game.ParticleCount() do
+				local particle = Game.Particle(i);
+				if particle ~= nil and not particle.dead and particle.pos:DistanceTo(mousePos) <= 200 then
+					if isOnScreen(particle) then -- just because of fps
+						table.insert(Particles, particle);
+					end
 				end
 			end
 		end);
@@ -153,6 +167,7 @@ Callback.Add('Load',
 							return math.max(obj.attackData.endTime - Game.Timer(), 0);
 						end));
 					end
+
 					if menu.spellData:Value() then
 						for j, slot in ipairs(slots) do
 							local spellData = obj:GetSpellData(slot);
@@ -172,6 +187,7 @@ Callback.Add('Load',
 							end
 						end
 					end
+
 					if menu.buff:Value() then
 						for j = 1, obj.buffCount do
 							local buff = obj:GetBuff(j);
@@ -190,6 +206,7 @@ Callback.Add('Load',
 					end
 				end
 			end
+
 			for i, missile in ipairs(Missiles) do
 				if isOnScreen(missile) then
 					if menu.missileData:Value() then
@@ -229,6 +246,16 @@ Callback.Add('Load',
 						end));
 						drawText(missile, getValue('manaCost', function()
 							return missile.missileData.manaCost;
+						end));
+					end
+				end
+			end
+
+			for i, particle in ipairs(Particles) do
+				if isOnScreen(particle) then
+					if menu.particles:Value() then
+						drawText(particle, getValue('name', function()
+							return particle.name;
 						end));
 					end
 				end
