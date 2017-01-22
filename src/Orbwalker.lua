@@ -5,37 +5,37 @@ end);
 local function BuffIsValid(buff)
 	return buff ~= nil and buff.startTime <= Game.Timer() and buff.expireTime >= Game.Timer();
 end
-local function HasBuff(source, name)
-	if CachedBuffNames[source.networkID] == nil then
+local function HasBuff(target, name)
+	if CachedBuffNames[target.networkID] == nil then
 		local t = {};
 		for i = 1, unit.buffCount do
-			local buff = source:GetBuff(i)
+			local buff = target:GetBuff(i)
 			if BuffIsValid(buff) then
 				t[buff.name] = buff.stack;
 			end
 		end
-		CachedBuffNames[source.networkID] = t;
+		CachedBuffNames[target.networkID] = t;
 	end
-	return CachedBuffNames[source.networkID][name] ~= nil;
+	return CachedBuffNames[target.networkID][name] ~= nil;
 end
 
 local SpecialAutoAttackRanges = {
-	["Caitlyn"] = function(source, target)
+	["Caitlyn"] = function(from, target)
 		if target ~= nil and HasBuff(target, "caitlynyordletrapinternal") then
 			return 650;
 		end
 		return 0;
 	end,
 }
-local function GetAutoAttackRange(source, target)
-	if source.type == Obj_AI_Minion then
+local function GetAutoAttackRange(from, target)
+	if from.type == Obj_AI_Minion then
 		return 0;
-	elseif source.type == Obj_AI_Turret then
+	elseif from.type == Obj_AI_Turret then
 		return 775;
 	end
-	local range = source.range + source.boundingRadius + (target ~= nil and (boundingRadius - 30) or 35);
-	if SpecialAutoAttackRanges[source.charName] ~= nil then
-		range = range + SpecialAutoAttackRanges[source.charName](source, target);
+	local range = from.range + from.boundingRadius + (target ~= nil and (boundingRadius - 30) or 35);
+	if SpecialAutoAttackRanges[from.charName] ~= nil then
+		range = range + SpecialAutoAttackRanges[from.charName](from, target);
 	end
 	return range;
 end
@@ -136,15 +136,15 @@ local function GetDistance(a, b)
 end
 
 
-local function IsInRange(source, target, range)
-	return GetDistanceSquared(source, target) <= range * range;
+local function IsInRange(from, target, range)
+	return GetDistanceSquared(from, target) <= range * range;
 end
 
 local DAMAGE_TYPE_PHYSICAL 	= 0;
 local DAMAGE_TYPE_MAGICAL 	= 1;
 local DAMAGE_TYPE_TRUE 		= 2;
-local function GetDamage(source, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
-	if source == nil or target == nil then
+local function GetDamage(from, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
+	if from == nil or target == nil then
 		return 0;
 	end
 	if isAbility == nil then
@@ -162,25 +162,25 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	if damageType == DAMAGE_TYPE_PHYSICAL then
 		baseResistance = math.max(target.armor - target.bonusArmor, 0);
 		bonusResistance = target.bonusArmor;
-		penetrationFlat = source.armorPen;
-		penetrationPercent = source.armorPenPercent;
-		bonusPenetrationPercent = source.bonusArmorPenPercent;
+		penetrationFlat = from.armorPen;
+		penetrationPercent = from.armorPenPercent;
+		bonusPenetrationPercent = from.bonusArmorPenPercent;
 
 		--  Minions return wrong percent values.
-		if source.type == Obj_AI_Minion then
+		if from.type == Obj_AI_Minion then
 			penetrationFlat = 0;
 			penetrationPercent = 0;
 			bonusPenetrationPercent = 0;
-		elseif source.type == Obj_AI_Turret then
+		elseif from.type == Obj_AI_Turret then
 			penetrationFlat = 0;
-			penetrationPercent = (not IsBaseTurret(source)) and 0.25 or 0.75;
+			penetrationPercent = (not IsBaseTurret(from)) and 0.25 or 0.75;
 			bonusPenetrationPercent = 0;
 		end
 	elseif damageType == DAMAGE_TYPE_MAGICAL then
 		baseResistance = math.max(target.magicResist - target.bonusMagicResist, 0);
 		bonusResistance = target.bonusMagicResist;
-		penetrationFlat = source.magicPen;
-		penetrationPercent = source.magicPenPercent;
+		penetrationFlat = from.magicPen;
+		penetrationPercent = from.magicPenPercent;
 		bonusPenetrationPercent = 0;
 	elseif damageType == DAMAGE_TYPE_TRUE then
 		return rawDamage;
@@ -205,30 +205,41 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	else
 		percentMod = percentMod * (2 - 100 / (100 - resistance));
 	end
-	local percentPassive = 1;
 	local percentReceived = 1;
-	local flatReceived = 0;
 	local flatPassive = 0;
+
+	local fromIsMinion = from.type == Obj_AI_Minion;
+	local targetIsMinion = target.type == Obj_AI_Minion;
+
+	local percentPassive = 1;
+	if fromIsMinion and targetIsMinion then
+		percentPassive = percentPassive * (1 + from.bonusDamagePercent);
+	end
+
+	local flatReceived = 0;
+	if fromIsMinion and targetIsMinion then
+		flatReceived = flatReceived - target.flatDamageReduction;
+	end
 
 	return math.max(percentReceived * percentPassive * percentMod * (rawDamage + flatPassive) + flatReceived, 0);
 end
 
-local function GetHeroAutoAttackDamage(source, target, staticDamage)
-	local totalDamage = source.totalDamage;
-	return GetDamage(source, target, DAMAGE_TYPE_PHYSICAL, totalDamage, false, true);
+local function GetHeroAutoAttackDamage(from, target, staticDamage)
+	local totalDamage = from.totalDamage;
+	return GetDamage(from, target, DAMAGE_TYPE_PHYSICAL, totalDamage, false, true);
 end
 
-local function GetAutoAttackDamage(source, target, respectPassives)
+local function GetAutoAttackDamage(from, target, respectPassives)
 	if respectPassives == nil then
 		respectPassives = true;
 	end
-	if source == nil or target == nil then
+	if from == nil or target == nil then
 		return 0;
 	end
-	if respectPassives and source.type == Obj_AI_Hero then
-		return GetHeroAutoAttackDamage(source, target, 0);
+	if respectPassives and from.type == Obj_AI_Hero then
+		return GetHeroAutoAttackDamage(from, target, 0);
 	end
-	return GetDamage(source, target, DAMAGE_TYPE_PHYSICAL, source.totalDamage, false, true);
+	return GetDamage(from, target, DAMAGE_TYPE_PHYSICAL, from.totalDamage, false, true);
 end
 
 class "__HealthPrediction"
