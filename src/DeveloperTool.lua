@@ -1,6 +1,8 @@
 local PRINT_CONSOLE = false;
 
 local menu = MenuElement({ id = "DeveloperTool", name = "DeveloperTool", type = MENU });
+menu:MenuElement({ id = "GameObject", name = "GameObject", value = false });
+menu:MenuElement({ id = "damage", name = "damage", value = false });
 menu:MenuElement({ id = "attackData", name = "attackData", value = false });
 menu:MenuElement({ id = "missileData", name = "missileData", value = false });
 menu:MenuElement({ id = "spellData", name = "spellData", value = false });
@@ -46,7 +48,7 @@ local function getValue(name, func)
 	if PRINT_CONSOLE then
 		print('Checking ' .. name);
 	end
-	return name .. ": " .. func() .. ", ";
+	return name .. ": " .. tostring(func()) .. ", ";
 end
 
 local counters = {};
@@ -58,7 +60,7 @@ local function drawText(target, value)
 	end
 	local position = target.pos:To2D();
 	position.y = position.y + 30 + 18 * counters[target.networkID];
-	Draw.Text(value, position);
+	Draw.Text(tostring(value), position);
 end
 
 local stateTable = {};
@@ -137,6 +139,75 @@ Callback.Add('Load',
 			counters = {};
 			for i, obj in ipairs(Obj_AI_Bases) do
 				if isOnScreen(obj) then
+					if menu.damage:Value() then
+						drawText(obj, getValue('totalDamage', function()
+							return obj.totalDamage;
+						end));
+						drawText(obj, getValue('ap', function()
+							return obj.ap;
+						end));
+						drawText(obj, getValue('armor', function()
+							return obj.armor;
+						end));
+						if obj.type == Obj_AI_Hero then
+							drawText(obj, getValue('bonusArmor', function()
+								return obj.bonusArmor;
+							end));
+							drawText(obj, getValue('armorPen', function()
+								return obj.armorPen;
+							end));
+							drawText(obj, getValue('armorPenPercent', function()
+								return obj.armorPenPercent;
+							end));
+							drawText(obj, getValue('bonusArmorPenPercent', function()
+								return obj.bonusArmorPenPercent;
+							end));
+							drawText(obj, getValue('magicResist', function()
+								return obj.magicResist;
+							end));
+							drawText(obj, getValue('bonusMagicResist', function()
+								return obj.bonusMagicResist;
+							end));
+							drawText(obj, getValue('magicPen', function()
+								return obj.magicPen;
+							end));
+							drawText(obj, getValue('magicPenPercent', function()
+								return obj.magicPenPercent;
+							end));
+						end
+						if obj.type == Obj_AI_Minion then
+							drawText(obj, getValue('bonusDamagePercent', function()
+								return obj.bonusDamagePercent;
+							end));
+							drawText(obj, getValue('flatDamageReduction', function()
+								return obj.flatDamageReduction;
+							end));
+						end
+					end
+					if menu.GameObject:Value() then
+						drawText(obj, getValue('type', function()
+							return obj.type;
+						end));
+						drawText(obj, getValue('charName', function()
+							return obj.charName;
+						end));
+						drawText(obj, getValue('name', function()
+							return obj.name;
+						end));
+						drawText(obj, getValue('range', function()
+							return obj.range;
+						end));
+						drawText(obj, getValue('isAlly', function()
+							return obj.isAlly;
+						end));
+						drawText(obj, getValue('isEnemy', function()
+							return obj.isEnemy;
+						end));
+						drawText(obj, getValue('team', function()
+							return obj.team;
+						end));
+					end
+
 					if menu.attackData:Value() then
 						drawText(obj, getValue('state', function()
 							return convertState(obj.attackData.state);
