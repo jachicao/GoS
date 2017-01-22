@@ -187,9 +187,13 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	end
 	local resistance = baseResistance + bonusResistance;
 	if resistance > 0 then
-		baseResistance = baseResistance * (1 - penetrationPercent);
-		bonusResistance = bonusResistance * (1 - penetrationPercent);
-		bonusResistance = bonusResistance * (1 - bonusPenetrationPercent);
+		if penetrationPercent > 0 then
+			baseResistance = baseResistance * penetrationPercent;
+			bonusResistance = bonusResistance * penetrationPercent;
+		end
+		if bonusPenetrationPercent > 0 then
+			bonusResistance = bonusResistance * bonusPenetrationPercent;
+		end
 		resistance = baseResistance + bonusResistance;
 		resistance = resistance - penetrationFlat;
 	end
