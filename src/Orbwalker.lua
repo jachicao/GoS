@@ -193,9 +193,13 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	end
 	local resistance = baseResistance + bonusResistance;
 	if resistance > 0 then
-		baseResistance = baseResistance * (1 - penetrationPercent);
-		bonusResistance = bonusResistance * (1 - penetrationPercent);
-		bonusResistance = bonusResistance * (1 - bonusPenetrationPercent);
+		if penetrationPercent > 0 then
+			baseResistance = baseResistance * penetrationPercent;
+			bonusResistance = bonusResistance * penetrationPercent;
+		end
+		if bonusPenetrationPercent > 0 then
+			bonusResistance = bonusResistance * bonusPenetrationPercent;
+		end
 		resistance = baseResistance + bonusResistance;
 		resistance = resistance - penetrationFlat;
 	end
@@ -203,9 +207,9 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	local percentMod = 1;
 	-- Penetration cant reduce resistance below 0.
 	if resistance >= 0 then
-		percentMod = percent * 100 / (100 + resistance);
+		percentMod = percentMod * (100 / (100 + resistance));
 	else
-		percentMod = 2 - 100 / (100 - resistance);
+		percentMod = percentMod * (2 - 100 / (100 - resistance));
 	end
 	local percentPassive = 1;
 	local percentReceived = 1;
@@ -244,6 +248,10 @@ class "__HealthPrediction"
 		end);
 	end
 
+	function __HealthPrediction:GetPredictedHealth(target, time)
+		local total = 0;
+	end
+
 	function __HealthPrediction:OnTick()
 		self.EnemyMinionsHandle = {};
 		self.EnemyMinions = {};
@@ -253,6 +261,7 @@ class "__HealthPrediction"
 			if IsValidTarget(minion) then
 				if minion.isAlly then
 					self:CheckNewState(minion);
+					newAlliesState[source.networkID] = source.attackData.state;
 				elseif minion.isEnemy then
 					self.EnemyMinionsHandle[minion.handle] = minion.networkID;
 				end
@@ -267,6 +276,7 @@ class "__HealthPrediction"
 			if IsValidTarget(turret) then
 				if turret.isAlly then
 					self:CheckNewState(turret);
+					newAlliesState[source.networkID] = source.attackData.state;
 				end
 			else
 				if self.IncomingAttacks[turret.networkID] ~= nil then
@@ -280,7 +290,6 @@ class "__HealthPrediction"
 	function __HealthPrediction:CheckNewState(source)
 		local currentState = source.attackData.state;
 		local prevState = self.AlliesState[source.networkID];
-		newAlliesState[source.networkID] = currentState;
 		if prevState ~= nil then
 			if prevState == STATE_ATTACK and currentState == STATE_WINDUP then
 				self:OnBasicAttack(source);
@@ -349,7 +358,7 @@ class "__IncomingAttack"
 
 	function __IncomingAttack:GetAutoAttackDamage()
 		if self.AutoAttackDamage == nil then
-			self.AutoAttackDamage = GetAutoAttackDamage(self.Source, self.Target, true);
+			self.AutoAttackDamage = GetAutoAttackDamage(self.Source, self.Target);
 		end
 		return self.AutoAttackDamage;
 	end
