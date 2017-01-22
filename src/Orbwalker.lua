@@ -63,7 +63,7 @@ local function IsMelee(source)
 	end
 end
 
-local function isRanged(source)
+local function IsRanged(source)
 	return not IsMelee(source);
 end
 
@@ -97,15 +97,6 @@ local CachedValidTargets = {};
 Callback.Add('Tick', function()
 	CachedValidTargets = {};
 end);
-local function IsValidTarget(target)
-	if target == nil or target.networkID == nil then
-		return false;
-	end
-	if CachedValidTargets[target.networkID] == nil then
-		CachedValidTargets[target.networkID] = __IsValidTarget(target);
-	end
-	return CachedValidTargets[target.networkID];
-end
 local function __IsValidTarget(target)
 	if IsObj_AI_Base(target) and not target.valid then
 		return false;
@@ -115,8 +106,25 @@ local function __IsValidTarget(target)
 	end
 	return true;
 end
+local function IsValidTarget(target)
+	if target == nil or target.networkID == nil then
+		return false;
+	end
+	if CachedValidTargets[target.networkID] == nil then
+		CachedValidTargets[target.networkID] = __IsValidTarget(target);
+	end
+	return CachedValidTargets[target.networkID];
+end
 
 local function GetDistanceSquared(a, b)
+	local aIsGameObject = a.pos ~= nil;
+	local bIsGameObject = b.pos ~= nil;
+	if aIsGameObject then
+		a = a.pos;
+	end
+	if bIsGameObject then
+		b = b.pos;
+	end
 	local x = (a.x - b.x);
 	local y = (a.y - b.y);
 	local z = (a.z - b.z);
@@ -129,21 +137,7 @@ end
 
 
 local function IsInRange(source, target, range)
-	local sourceIsGameObject = source.pos ~= nil;
-	local targetIsGameObject = target.pos ~= nil;
-	local sourceVector = nil;
-	local targetVector = nil;
-	if sourceIsGameObject then
-		sourceVector = source.pos;
-	else
-		sourceVector = source;
-	end
-	if targetIsGameObject then
-		targetVector = target.pos;
-	else
-		targetVector = target;
-	end
-	return GetDistanceSquared(sourceVector, targetVector) <= range * range;
+	return GetDistanceSquared(source, target) <= range * range;
 end
 
 local DAMAGE_TYPE_PHYSICAL 	= 0;
@@ -193,13 +187,9 @@ local function GetDamage(source, target, damageType, rawDamage, isAbility, isAut
 	end
 	local resistance = baseResistance + bonusResistance;
 	if resistance > 0 then
-		if penetrationPercent > 0 then
-			baseResistance = baseResistance * penetrationPercent;
-			bonusResistance = bonusResistance * penetrationPercent;
-		end
-		if bonusPenetrationPercent > 0 then
-			bonusResistance = bonusResistance * bonusPenetrationPercent;
-		end
+		baseResistance = baseResistance * (1 - penetrationPercent);
+		bonusResistance = bonusResistance * (1 - penetrationPercent);
+		bonusResistance = bonusResistance * (1 - bonusPenetrationPercent);
 		resistance = baseResistance + bonusResistance;
 		resistance = resistance - penetrationFlat;
 	end
@@ -241,29 +231,19 @@ class "__HealthPrediction"
 	function __HealthPrediction:__init()
 		self.IncomingAttacks = {}; -- networkID => [__IncomingAttack]
 		self.AlliesState = {}; -- networkID => state
-		self.EnemyMinionsHandle = {}; -- handle => networkID
-		self.EnemyMinions = {}; -- networkID => GameObject
 		Callback.Add('Tick', function()
 			self:OnTick();
 		end);
 	end
 
-	function __HealthPrediction:GetPredictedHealth(target, time)
-		local total = 0;
-	end
-
 	function __HealthPrediction:OnTick()
-		self.EnemyMinionsHandle = {};
-		self.EnemyMinions = {};
 		local newAlliesState = {};
 		for i = 1, Game.MinionCount() do
 			local minion = Game.Minion(i);
 			if IsValidTarget(minion) then
 				if minion.isAlly then
 					self:CheckNewState(minion);
-					newAlliesState[source.networkID] = source.attackData.state;
-				elseif minion.isEnemy then
-					self.EnemyMinionsHandle[minion.handle] = minion.networkID;
+					newAlliesState[minion.networkID] = minion.attackData.state;
 				end
 			else
 				if self.IncomingAttacks[minion.networkID] ~= nil then
@@ -276,11 +256,21 @@ class "__HealthPrediction"
 			if IsValidTarget(turret) then
 				if turret.isAlly then
 					self:CheckNewState(turret);
-					newAlliesState[source.networkID] = source.attackData.state;
+					newAlliesState[turret.networkID] = turret.attackData.state;
 				end
 			else
 				if self.IncomingAttacks[turret.networkID] ~= nil then
 					table.remove(self.IncomingAttacks, turret.networkID);
+				end
+			end
+		end
+
+		-- remove older attacks
+		for i, attacks in pairs(self.IncomingAttacks) do
+			for j, attack in ipairs(attacks) do
+				if attack:ShouldRemove() then
+					table.remove(attacks, j);
+					break;
 				end
 			end
 		end
@@ -291,18 +281,18 @@ class "__HealthPrediction"
 		local currentState = source.attackData.state;
 		local prevState = self.AlliesState[source.networkID];
 		if prevState ~= nil then
-			if prevState == STATE_ATTACK and currentState == STATE_WINDUP then
+			if prevState ~= STATE_WINDUP and currentState == STATE_WINDUP then
 				self:OnBasicAttack(source);
 			end
 		end
 	end
 
 	function __HealthPrediction:OnBasicAttack(source)
-		local target = self:GetAllyTarget(source);
-		if target == nil then
+		local targetHandle = source.attackData.target;
+		if targetHandle == nil or targetHandle <= 0 then
 			return;
 		end
-		if IsBaseTurret(source) ~= nil then -- fps drops
+		if IsBaseTurret(source) then -- fps drops
 			return;
 		end
 		if not IsInRange(myHero, source, 1500) then
@@ -315,36 +305,42 @@ class "__HealthPrediction"
 				attack.IsActiveAttack = false;
 			end
 		end
-		table.insert(self.IncomingAttacks[source.networkID], __IncomingAttack(source, target));
+		table.insert(self.IncomingAttacks[source.networkID], __IncomingAttack(source, targetHandle));
 	end
 
-	function __HealthPrediction:GetAllyTarget(ally)
-		local targetHandle = ally.attackData.target;
-		if targetHandle ~= nil and targetHandle > 0 then
-			return self:GetEnemyMinionByHandle(targetHandle);
+	function __HealthPrediction:GetPrediction(target, time)
+		local health = target.health;
+		for i, attacks in pairs(self.IncomingAttacks) do
+			for j, attack in ipairs(attacks) do
+				if attack:EqualsTarget(target) then
+					health = health - attack:GetPredictedDamage(target, time);
+				end
+			end
 		end
-		return nil;
+		return health;
 	end
 
-	function __HealthPrediction:GetEnemyMinionByHandle(handle)
-		local networkID = self.EnemyMinionsHandle[handle];
-		if networkID ~= nil then
-			return self:GetEnemyMinionByNetworkID(networkID);
+	function __HealthPrediction:GetPredictions(minions) -- [networkID => { Minion = GameObject, Time = time }]
+		for networkID, value in pairs(minions) do
+			value.Health = value.Minion.health;
 		end
-		return nil;
-	end
 
-	function __HealthPrediction:GetEnemyMinionByNetworkID(networkID)
-		if self.EnemyMinions[networkID] == nil then
-			self.EnemyMinions[networkID] = Game.GetObjectByNetID(networkID);
+		for i, attacks in pairs(self.IncomingAttacks) do
+			for j, attack in ipairs(attacks) do
+				local minion = minions[attack.Target.networkID];
+				if minion ~= nil then
+					minion.Health = minion.Health - attack:GetPredictedDamage(minion.Minion, minion.Time);
+				end
+			end
 		end
-		return self.EnemyMinions[networkID];
+
+		return minions;
 	end
 
 class "__IncomingAttack"
-	function __IncomingAttack:__init(source, target)
+	function __IncomingAttack:__init(source, targetHandle)
 		self.Source = source;
-		self.Target = target;
+		self.TargetHandle = targetHandle;
 		self.SourceIsValid = true;
 		self.Arrived = false;
 		self.IsActiveAttack = true;
@@ -356,34 +352,34 @@ class "__IncomingAttack"
 		self.StartTime = Game.Timer();
 	end
 
-	function __IncomingAttack:GetAutoAttackDamage()
+	function __IncomingAttack:GetAutoAttackDamage(target)
 		if self.AutoAttackDamage == nil then
-			self.AutoAttackDamage = GetAutoAttackDamage(self.Source, self.Target);
+			self.AutoAttackDamage = GetAutoAttackDamage(self.Source, target);
 		end
 		return self.AutoAttackDamage;
 	end
 
-	function __IncomingAttack:GetMissileTime()
+	function __IncomingAttack:GetMissileTime(target)
 		if self.SourceIsMelee then
 			return 0;
 		end
-		return GetDistance(self.Source, self.Target) / self.MissileSpeed;
+		return GetDistance(self.SourcePosition, target) / self.MissileSpeed;
 	end
 
 	function __IncomingAttack:EqualsTarget(target)
-		return IdEquals(self.Target, target);
+		return target.handle == self.TargetHandle;
 	end
 
 	function __IncomingAttack:ShouldRemove()
-		return self.Target == nil or self.Target.dead or Game.Timer() - self.StartTime > 3 or self.Arrived;
+		return Game.Timer() - self.StartTime > 3 or self.Arrived;
 	end
 
-	function __IncomingAttack:GetPredictedDamage(delay)
+	function __IncomingAttack:GetPredictedDamage(target, delay)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Game.Latency() - 100;
-			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime() - Game.Timer();
-			if timeTillHit <= -250 then
+			delay = delay + Game.Latency() / 1000 - 0.1;
+			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - Game.Timer();
+			if timeTillHit <= -0.25 then
 				self.Arrived = true;
 			end
 			if not self.Arrived then
@@ -396,14 +392,34 @@ class "__IncomingAttack"
 						timeTillHit = timeTillHit + self.AnimationTime;
 					end
 					if count > 0 then
-						damage = damage + self:GetAutoAttackDamage() * count;
+						damage = damage + self:GetAutoAttackDamage(target) * count;
 					end
 				elseif timeTillHit < delay and timeTillHit > 0 then
 					if (not self.SourceIsMelee) or IsValidTarget(self.Source) then
-						damage = damage + self:GetAutoAttackDamage();
+						damage = damage + self:GetAutoAttackDamage(target);
 					end
 				end
 			end
 		end
 		return damage;
 	end
+
+class "__Orbwalker"
+	function __Orbwalker:__init()
+		self.HealthPrediction = __HealthPrediction();
+		Callback.Add('Draw', function()
+			for i = 1, Game.MinionCount() do
+				local minion = Game.Minion(i);
+				if IsValidTarget(minion) then
+					if minion.isEnemy then
+						local predictedHealth = self.HealthPrediction:GetPrediction(minion, 0.6);
+						if predictedHealth < minion.health then
+							Draw.Text(tostring(minion.health - predictedHealth), minion.pos:To2D());
+						end
+					end
+				end
+			end
+		end);
+	end
+
+_G.OW = __Orbwalker();
