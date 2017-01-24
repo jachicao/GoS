@@ -3,6 +3,7 @@ local PRINT_CONSOLE = false;
 local menu = MenuElement({ id = "DeveloperTool", name = "DeveloperTool", type = MENU });
 menu:MenuElement({ id = "GameObject", name = "GameObject", value = false });
 menu:MenuElement({ id = "damage", name = "damage", value = false });
+menu:MenuElement({ id = "item", name = "item", value = false });
 menu:MenuElement({ id = "attackData", name = "attackData", value = false });
 menu:MenuElement({ id = "missileData", name = "missileData", value = false });
 menu:MenuElement({ id = "spellData", name = "spellData", value = false });
@@ -96,6 +97,16 @@ local function getObjectByHandle(handle)
 	return networkID ~= nil and Game.GetObjectByNetID(networkID) or nil;
 end
 
+local itemSlots = {};
+table.insert(itemSlots, ITEM_1);
+table.insert(itemSlots, ITEM_2);
+table.insert(itemSlots, ITEM_3);
+table.insert(itemSlots, ITEM_4);
+table.insert(itemSlots, ITEM_5);
+table.insert(itemSlots, ITEM_6);
+table.insert(itemSlots, ITEM_7);
+
+
 Callback.Add('Load', 
 	function()
 		local Obj_AI_Bases = {};
@@ -104,8 +115,30 @@ Callback.Add('Load',
 		Callback.Add('Tick', function()
 			Obj_AI_Bases = {};
 			handleToNetworkID = {};
-			for i = 1, Game.ObjectCount() do
-				local obj = Game.Object(i);
+			for i = 1, Game.HeroCount() do
+				local obj = Game.Hero(i);
+				if isValidTarget(obj) then
+					if isObj_AI_Base(obj) then
+						if isOnScreen(obj) then -- just because of fps
+							table.insert(Obj_AI_Bases, obj);
+						end
+						handleToNetworkID[obj.handle] = obj.networkID;
+					end
+				end
+			end
+			for i = 1, Game.MinionCount() do
+				local obj = Game.Minion(i);
+				if isValidTarget(obj) then
+					if isObj_AI_Base(obj) then
+						if isOnScreen(obj) then -- just because of fps
+							table.insert(Obj_AI_Bases, obj);
+						end
+						handleToNetworkID[obj.handle] = obj.networkID;
+					end
+				end
+			end
+			for i = 1, Game.TurretCount() do
+				local obj = Game.Turret(i);
 				if isValidTarget(obj) then
 					if isObj_AI_Base(obj) then
 						if isOnScreen(obj) then -- just because of fps
@@ -208,7 +241,7 @@ Callback.Add('Load',
 						end));
 					end
 
-					if menu.attackData:Value() then
+					if menu.attackData:Value() and obj.type == Obj_AI_Hero then
 						drawText(obj, getValue('state', function()
 							return convertState(obj.attackData.state);
 						end));
@@ -237,6 +270,18 @@ Callback.Add('Load',
 						drawText(obj, getValue('timeLeft', function()
 							return math.max(obj.attackData.endTime - Game.Timer(), 0);
 						end));
+					end
+
+					if menu.item:Value() then
+						for j, slot in ipairs(itemSlots) do
+							local item = obj:GetItemData(slot);
+							if item ~= nil then
+								drawText(obj, "itemID: " .. item.itemID .. 
+									", stacks: " .. item.stacks .. 
+									", ammo: " .. item.ammo
+								);
+							end
+						end
 					end
 
 					if menu.spellData:Value() then
@@ -278,9 +323,9 @@ Callback.Add('Load',
 				end
 			end
 
-			for i, missile in ipairs(Missiles) do
-				if isOnScreen(missile) then
-					if menu.missileData:Value() then
+			if menu.missileData:Value() then
+				for i, missile in ipairs(Missiles) do
+					if isOnScreen(missile) then
 						drawText(missile, getValue('name', function()
 							return missile.missileData.name;
 						end));
@@ -322,9 +367,9 @@ Callback.Add('Load',
 				end
 			end
 
-			for i, particle in ipairs(Particles) do
-				if isOnScreen(particle) then
-					if menu.particles:Value() then
+			if menu.particles:Value() then
+				for i, particle in ipairs(Particles) do
+					if isOnScreen(particle) then
 						drawText(particle, getValue('name', function()
 							return particle.name;
 						end));
