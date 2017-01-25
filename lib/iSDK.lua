@@ -1,3 +1,111 @@
+local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+function Base64Encode(data)
+    return ((data:gsub('.', function(x) 
+        local r,b='',x:byte()
+        for i=8,1,-1 do r=r..(b%2^i-b%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+        if (#x < 6) then return '' end
+        local c=0
+        for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+        return b:sub(c+1,c+1)
+    end)..({ '', '==', '=' })[#data%3+1])
+end
+
+function Base64Decode(data)
+    data = string.gsub(data, '[^'..b..'=]', '')
+    return (data:gsub('.', function(x)
+        if (x == '=') then return '' end
+        local r,f='',(b:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if (#x ~= 8) then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+function GetWebResult(url, callback, UseHttps)
+  local UseHttps = UseHttps ~= nil and UseHttps or true
+  local url = url:gsub("https://", ""):gsub("http://", "")
+  local GotResult = false
+  local started = false
+  local result = ""
+  local Socket = require("socket").connect('gamingonsteroids.com', 80)
+  if Socket then
+    Socket:send("GET "..'/GOS/TCPUpdater/GetScript'..(UseHttps and '5' or '6')..'.php?script='..Base64Encode(url)..'&rand='..math.random(99999999).." HTTP/1.1\r\nHost: gamingonsteroids.com\r\n\r\n")
+    Socket:settimeout(0, 'b')
+    Socket:settimeout(99999999, 't')  
+    Callback.Add("Tick", function()
+      if GotResult then return end
+      local s, status, partial = Socket:receive(1024)
+      result = result .. (s or partial)
+      if result:find('</scr'..'ipt>') then
+        local a,b = result:find('\r\n\r\n')
+        result = result:sub(a,-1)
+        local HeaderEnd, ContentStart = result:find('<scr'..'ipt>')
+        local ContentEnd, _ = result:find('</scr'..'ipt>')
+        if not ContentStart or not ContentEnd then return end
+        if callback and type(callback) == 'function' then
+          callback(Base64Decode(result:sub(ContentStart + 1, ContentEnd - 1)))
+        end
+        GotResult = true
+        Socket:close()
+      end
+    end)
+  end
+end
+
+function DownloadFile(url, path, callback, UseHttps)
+  local UseHttps = UseHttps ~= nil and UseHttps or true
+  local url = url:gsub("https://", ""):gsub("http://", "")
+  local filesize
+  local GotFile = false
+  local started = false
+  local result = ""
+  local Socket = require("socket").connect('gamingonsteroids.com', 80)
+  if Socket then
+    Socket:send("GET "..'/GOS/TCPUpdater/GetScript'..(UseHttps and '5' or '6')..'.php?script='..Base64Encode(url)..'&rand='..math.random(99999999).." HTTP/1.1\r\nHost: gamingonsteroids.com\r\n\r\n")
+    Socket:settimeout(0, 'b')
+    Socket:settimeout(99999999, 't')
+    Callback.Add("Tick", function()
+      if GotFile then return end
+      local s, status, partial = Socket:receive(1024)
+      result = result .. (s or partial)
+      if result:find('</si'..'ze>') then
+        if not filesize then
+          filesize = tonumber(result:sub(result:find('<si'..'ze>')+6,result:find('</si'..'ze>')-1))
+        end
+      end
+      if result:find('</scr'..'ipt>') then
+        local a,b = result:find('\r\n\r\n')
+        result = result:sub(a,-1)
+        local file = ""
+        for line,content in ipairs(result:split('\n')) do
+          if content:len() > 5 then
+            file = file..content
+          end
+        end
+        local HeaderEnd, ContentStart = file:find('<scr'..'ipt>')
+        local ContentEnd, _ = file:find('</scr'..'ipt>')
+        if not ContentStart or not ContentEnd then return end
+        local newf = file:sub(ContentStart+1,ContentEnd-1):gsub('\r','')
+        if newf:len() ~= filesize then return end
+        local f = io.open(path,"w+b")
+        f:write(Base64Decode(newf))
+        f:close()
+        if callback and type(callback) == 'function' then
+          callback()
+        end
+        GotFile = true
+        Socket:close()
+      end
+    end)
+  end
+end
+
 iSDK_Version = 0.1;
 
 -- _G Globals
@@ -677,21 +785,21 @@ class "__IncomingAttack"
 		return damage;
 	end
 
-GetWebResultAsync("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.version",
+GetWebResult("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.version",
 	function(version)
 		if tonumber(version) > tonumber(iSDK_Version) then
 			print("New iSDK version found, please wait...");
-			GetWebResultAsync("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.changelog",
+			GetWebResult("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.changelog",
 				function(changelog)
 					print("Changelog: ");
 					print(tostring(changelog));
-					DownloadFileAsync("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.lua", 
+					DownloadFile("https://raw.githubusercontent.com/jachicao/GoS/master/lib/iSDK.lua", 
 						COMMON_PATH.."iSDK.lua", 
 						function()
 							print("Done, please press 2x F6 to load!");
 							return
 						end);
-				end)
+				end);
 		else
 			if not _G.iSDK_Loaded then
 				BuffManager = __BuffManager();
