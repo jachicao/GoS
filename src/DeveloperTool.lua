@@ -109,13 +109,11 @@ table.insert(itemSlots, ITEM_7);
 
 Callback.Add('Load', 
 	function()
-		local Obj_AI_Bases = {};
-		local Missiles = {};
-		local Particles = {};
+		local Obj_AI_Bases = {}
 		Callback.Add('Tick', function()
 			Obj_AI_Bases = {};
 			handleToNetworkID = {};
-			for i = 1, Game.HeroCount() do
+			for i = 0, Game.HeroCount() do
 				local obj = Game.Hero(i);
 				if isValidTarget(obj) then
 					if isObj_AI_Base(obj) then
@@ -126,7 +124,7 @@ Callback.Add('Load',
 					end
 				end
 			end
-			for i = 1, Game.MinionCount() do
+			for i = 0, Game.MinionCount() do
 				local obj = Game.Minion(i);
 				if isValidTarget(obj) then
 					if isObj_AI_Base(obj) then
@@ -137,7 +135,7 @@ Callback.Add('Load',
 					end
 				end
 			end
-			for i = 1, Game.TurretCount() do
+			for i = 0, Game.TurretCount() do
 				local obj = Game.Turret(i);
 				if isValidTarget(obj) then
 					if isObj_AI_Base(obj) then
@@ -148,28 +146,46 @@ Callback.Add('Load',
 					end
 				end
 			end
-
-			Missiles = {};
-			for i = 1, Game.MissileCount() do
-				local missile = Game.Missile(i);
-				if isValidMissile(missile) then
-					table.insert(Missiles, missile);
-				end
-			end
-
-			Particles = {};
-			for i = 1, Game.ParticleCount() do
-				local particle = Game.Particle(i);
-				if particle ~= nil and not particle.dead and particle.pos:DistanceTo(mousePos) <= 200 then
-					if isOnScreen(particle) then -- just because of fps
-						table.insert(Particles, particle);
-					end
-				end
-			end
 		end);
 
 		Callback.Add('Draw', function()
 			counters = {};
+			if menu.GameObject:Value() then
+				if Game.ObjectCount() > 0 then
+					for i = 0, Game.ObjectCount() do
+						local obj = Game.Object(i);
+						if isValidTarget(obj) then
+							drawText(obj, getValue('type', function()
+								return obj.type;
+							end));
+							drawText(obj, getValue('charName', function()
+								return obj.charName;
+							end));
+							drawText(obj, getValue('name', function()
+								return obj.name;
+							end));
+							drawText(obj, getValue('range', function()
+								return obj.range;
+							end));
+							drawText(obj, getValue('isAlly', function()
+								return obj.isAlly;
+							end));
+							drawText(obj, getValue('isEnemy', function()
+								return obj.isEnemy;
+							end));
+							drawText(obj, getValue('team', function()
+								return obj.team;
+							end));
+							drawText(obj, getValue('health', function()
+								return obj.health;
+							end));
+							drawText(obj, getValue('maxHealth', function()
+								return obj.maxHealth;
+							end));
+						end
+					end
+				end
+			end
 			for i, obj in ipairs(Obj_AI_Bases) do
 				if isOnScreen(obj) then
 					if menu.damage:Value() then
@@ -217,29 +233,6 @@ Callback.Add('Load',
 							end));
 						end
 					end
-					if menu.GameObject:Value() then
-						drawText(obj, getValue('type', function()
-							return obj.type;
-						end));
-						drawText(obj, getValue('charName', function()
-							return obj.charName;
-						end));
-						drawText(obj, getValue('name', function()
-							return obj.name;
-						end));
-						drawText(obj, getValue('range', function()
-							return obj.range;
-						end));
-						drawText(obj, getValue('isAlly', function()
-							return obj.isAlly;
-						end));
-						drawText(obj, getValue('isEnemy', function()
-							return obj.isEnemy;
-						end));
-						drawText(obj, getValue('team', function()
-							return obj.team;
-						end));
-					end
 
 					if menu.attackData:Value() and obj.type == Obj_AI_Hero then
 						drawText(obj, getValue('state', function()
@@ -275,7 +268,7 @@ Callback.Add('Load',
 					if menu.item:Value() then
 						for j, slot in ipairs(itemSlots) do
 							local item = obj:GetItemData(slot);
-							if item ~= nil then
+							if item ~= nil and item.itemID > 0 then
 								drawText(obj, "itemID: " .. item.itemID .. 
 									", stacks: " .. item.stacks .. 
 									", ammo: " .. item.ammo
@@ -305,7 +298,7 @@ Callback.Add('Load',
 					end
 
 					if menu.buff:Value() then
-						for j = 1, obj.buffCount do
+						for j = 0, obj.buffCount do
 							local buff = obj:GetBuff(j);
 							if buff ~= nil and buff.count > 0 then
 								drawText(obj, "type: " .. buff.type .. 
@@ -324,55 +317,61 @@ Callback.Add('Load',
 			end
 
 			if menu.missileData:Value() then
-				for i, missile in ipairs(Missiles) do
-					if isOnScreen(missile) then
-						drawText(missile, getValue('name', function()
-							return missile.missileData.name;
-						end));
-						drawText(missile, getValue('owner', function()
-							local owner = getObjectByHandle(missile.missileData.owner);
-							return isValidTarget(owner) and owner.name or "";
-						end));
-						drawText(missile, getValue('target', function()
-							local target = getObjectByHandle(missile.missileData.target);
-							return isValidTarget(target) and target.name or "";
-						end));
-						--[[
-						drawText(missile, getValue('startPos', function()
-							return missile.missileData.startPos;
-						end));
-						drawText(missile, getValue('endPos', function()
-							return missile.missileData.endPos;
-						end));
-						drawText(missile, getValue('placementPos', function()
-							return missile.missileData.placementPos;
-						end));
-						]]
-						drawText(missile, getValue('range', function()
-							return missile.missileData.range;
-						end));
-						drawText(missile, getValue('delay', function()
-							return missile.missileData.delay;
-						end));
-						drawText(missile, getValue('speed', function()
-							return missile.missileData.speed;
-						end));
-						drawText(missile, getValue('width', function()
-							return missile.missileData.width;
-						end));
-						drawText(missile, getValue('manaCost', function()
-							return missile.missileData.manaCost;
-						end));
+				for i = 0, Game.MissileCount() do
+					local missile = Game.Missile(i);
+					if isValidMissile(missile) then
+						if isOnScreen(missile) then
+							drawText(missile, getValue('name', function()
+								return missile.missileData.name;
+							end));
+							drawText(missile, getValue('owner', function()
+								local owner = getObjectByHandle(missile.missileData.owner);
+								return isValidTarget(owner) and owner.name or "";
+							end));
+							drawText(missile, getValue('target', function()
+								local target = getObjectByHandle(missile.missileData.target);
+								return isValidTarget(target) and target.name or "";
+							end));
+							--[[
+							drawText(missile, getValue('startPos', function()
+								return missile.missileData.startPos;
+							end));
+							drawText(missile, getValue('endPos', function()
+								return missile.missileData.endPos;
+							end));
+							drawText(missile, getValue('placementPos', function()
+								return missile.missileData.placementPos;
+							end));
+							]]
+							drawText(missile, getValue('range', function()
+								return missile.missileData.range;
+							end));
+							drawText(missile, getValue('delay', function()
+								return missile.missileData.delay;
+							end));
+							drawText(missile, getValue('speed', function()
+								return missile.missileData.speed;
+							end));
+							drawText(missile, getValue('width', function()
+								return missile.missileData.width;
+							end));
+							drawText(missile, getValue('manaCost', function()
+								return missile.missileData.manaCost;
+							end));
+						end
 					end
 				end
 			end
 
 			if menu.particles:Value() then
-				for i, particle in ipairs(Particles) do
-					if isOnScreen(particle) then
-						drawText(particle, getValue('name', function()
-							return particle.name;
-						end));
+				for i = 0, Game.ParticleCount() do
+					local particle = Game.Particle(i);
+					if particle ~= nil and not particle.dead and particle.pos:DistanceTo(mousePos) <= 200 then
+						if isOnScreen(particle) then -- just because of fps
+							drawText(particle, getValue('name', function()
+								return particle.name;
+							end));
+						end
 					end
 				end
 			end
