@@ -132,7 +132,28 @@ class "__ItemManager"
 
 class "__Damage"
 	function __Damage:__init()
+		self.StaticPassives = {
+			["Corki"] = function(args)
+				args.RawTotal = args.RawTotal * 0.5;
+				args.RawMagical = args.RawTotal;
+			end,
+			["Graves"] = function(args)
+				local t = { 70, 71, 72, 74, 75, 76, 78, 80, 81, 83, 85, 87, 89, 91, 95, 96, 97, 100 };
+				args.RawTotal = args.RawTotal * t[self:GetMaxLevel(args.From)] / 100;
+			end,
+			["Jinx"] = function(args)
+				if BuffManager:HasBuff(args.From, "JinxQ") then
+					args.RawTotal = args.RawTotal * 1.1;
+				end
+			end,
+			["Kalista"] = function(args)
+				args.RawTotal = args.RawTotal * 0.9;
+			end,
+		};
+	end
 
+	function __Damage:GetMaxLevel(hero)
+		return math.min(hero.levelData.lvl, 18);
 	end
 
 	function __Damage:CalculateDamage(from, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
@@ -216,13 +237,55 @@ class "__Damage"
 		return math.max(percentReceived * percentPassive * percentMod * (rawDamage + flatPassive) + flatReceived, 0);
 	end
 
-	function __Damage:GetHeroAutoAttackDamage(from, target, staticDamage)
-		local totalDamage = from.totalDamage;
-		local targetIsMinion = target.type == Obj_AI_Minion;
+	function __Damage:GetStaticAutoAttackDamage(from, targetIsMinion)
+		local args = {
+			From = from,
+			RawTotal = from.totalDamage,
+			RawPhysical = 0,
+			RawMagical = 0,
+			CalculatedTrue = 0,
+			CalculatedPhysical = 0,
+			CalculatedMagical = 0,
+			DamageType = DAMAGE_TYPE_PHYSICAL,
+			TargetIsMinion = targetIsMinion,
+		};
+		if self.StaticPassives[from.charName] ~= nil then
+			self.StaticPassives[from.charName](args);
+		end
+		return args;
+	end
+
+	function __Damage:GetHeroAutoAttackDamage(from, target, static)
 		if targetIsMinion and Utilities:IsOtherMinion(target) then
 			return 1;
 		end
-		return self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, totalDamage, false, true);
+		local targetIsMinion = target.type == Obj_AI_Minion;
+		local RawTotal = tonumber(static.RawTotal);
+		local RawPhysical = tonumber(static.RawPhysical);
+		local RawMagical = tonumber(static.RawMagical);
+		local CalculatedTrue = tonumber(static.CalculatedTrue);
+		local CalculatedPhysical = tonumber(static.CalculatedPhysical);
+		local CalculatedMagical = tonumber(static.CalculatedMagical);
+		local CriticalStrike = false;
+
+		if static.DamageType == DAMAGE_TYPE_PHYSICAL then
+			RawPhysical = RawPhysical + RawTotal;
+		elseif static.DamageType == DAMAGE_TYPE_MAGICAL then
+			RawMagical = RawMagical + RawTotal;
+		elseif static.DamageType == DAMAGE_TYPE_TRUE then
+			CalculatedTrue = CalculatedTrue + RawTotal;
+		end
+
+		if RawPhysical > 0 then
+			CalculatedPhysical = CalculatedPhysical + self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, RawPhysical, false, static.DamageType == DAMAGE_TYPE_PHYSICAL);
+		end
+
+		if RawMagical > 0 then
+			CalculatedMagical = CalculatedMagical + self:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, RawMagical, false, static.DamageType == DAMAGE_TYPE_MAGICAL);
+		end
+
+		local percentMod = 1;
+		return percentMod * CalculatedPhysical + CalculatedMagical + CalculatedTrue;
 	end
 
 	function __Damage:GetAutoAttackDamage(from, target, respectPassives)
@@ -233,7 +296,7 @@ class "__Damage"
 			return 0;
 		end
 		if respectPassives and from.type == Obj_AI_Hero then
-			return self:GetHeroAutoAttackDamage(from, target, 0);
+			return self:GetHeroAutoAttackDamage(from, target, self:GetStaticAutoAttackDamage(from, target.type == Obj_AI_Minion));
 		end
 		return self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, from.totalDamage, false, true);
 	end
@@ -1185,6 +1248,9 @@ class "__TargetSelector"
 				end);
 			end
 		end
+		if msg == KEY_DOWN then
+			--print(wParam);
+		end
 	end
 
 	function __TargetSelector:GetPriority(target)
@@ -1262,7 +1328,7 @@ ORBWALKER_TARGET_TYPE_STRUCTURE		= 3;
 
 class "__Orbwalker"
 	function __Orbwalker:__init()
-		self.Menu = MenuElement({ id = "Orbwalker", name = "Orbwalker", type = MENU });
+		self.Menu = MenuElement({ id = "IC's Orbwalker", name = "IC's Orbwalker", type = MENU });
 
 		self.DamageOnMinions = {};
 		self.EnemyMinionsInRange = {};
@@ -1276,11 +1342,10 @@ class "__Orbwalker"
 		self.LaneClearMinion = nil;
 		self.CustomMissileSpeed = nil;
 		self.CustomWindUpTime = nil;
+		self.StaticAutoAttackDamage = nil;
 
 		self.EnemyStructures = {};
 
-		self.LastEndTime = 0;
-		self.LastAutoAttack = 0;
 		self.LastAutoAttackSent = 0;
 		self.LastMovementSent = 0;
 		self.LastShouldWait = 0;
@@ -1298,6 +1363,13 @@ class "__Orbwalker"
 			[ORBWALKER_MODE_LASTHIT] = {},
 			[ORBWALKER_MODE_FLEE] = {},
 		};
+
+		self.OnUnkillableMinionCallbacks = {};
+		self.OnPreAttackCallbacks = {};
+		self.OnPreMovementCallbacks = {};
+
+		self.LastHoldKey = 0;
+		self.HoldKey = false;
 
 		self.ExtraWindUpTimes = {
 			["Jinx"] = 0.15,
@@ -1433,9 +1505,9 @@ class "__Orbwalker"
 			self.Menu.General:MenuElement({ id = "FastKiting", name = "Fast Kiting", value = true });
 			self.Menu.General:MenuElement({ id = "LaneClearHeroes", name = "Attack heroes in Lane Clear mode", value = true });
 			self.Menu.General:MenuElement({ id = "StickToTarget", name = "Stick to target (only melee)", value = true });
-			self.Menu.General:MenuElement({ id = "MovementDelay", name = "Movement Delay", value = 200, min = 0, max = 1000, step = 20 });
+			self.Menu.General:MenuElement({ id = "MovementDelay", name = "Movement Delay", value = 250, min = 0, max = 1000, step = 25 });
 			self.Menu.General:MenuElement({ id = "SupportMode." .. myHero.charName, name = "Support Mode", value = self.SupportHeroes[myHero.charName] ~= nil });
-			self.Menu.General:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = 100, min = 100, max = 250, step = 10 });
+			self.Menu.General:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = 120, min = 100, max = 250, step = 10 });
 			self.Menu.General:MenuElement({ id = "ExtraWindUpTime", name = "Extra WindUpTime", value = 40, min = 0, max = 200, step = 20 });
 
 		self.Menu:MenuElement({ id = "Farming", name = "Farming Settings", type = MENU });
@@ -1458,13 +1530,25 @@ class "__Orbwalker"
 		end);
 	end
 
+	function __Orbwalker:Clear()
+		self.DamageOnMinions = {};
+		self.EnemyMinionsInRange = {};
+		self.MonstersInRange = {};
+		self.UnkillableMinions = {};
+		self.LastHitMinions = {};
+		self.LastHitMinion = nil;
+		self.AlmostLastHitMinions = {};
+		self.AlmostLastHitMinion = nil;
+		self.LaneClearMinions = {};
+		self.LaneClearMinion = nil;
+		self.CustomMissileSpeed = nil;
+		self.CustomWindUpTime = nil;
+		self.StaticAutoAttackDamage = nil;
+	end
+
 	function __Orbwalker:OnTick()
 		self:Clear();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
-		if self.LastEndTime < self:GetEndTime() then
-			self.LastEndTime = self:GetEndTime();
-			self.LastAutoAttack = self:GetLastAutoAttack();
-		end
 		self.MyHeroCanMove = self:CanMove();
 		self.MyHeroCanAttack = self:CanAttack();
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
@@ -1481,22 +1565,87 @@ class "__Orbwalker"
 			self.MonstersInRange = Linq:Where(ObjectManager:GetMonsters(), function(minion)
 				return Utilities:IsInAutoAttackRange(myHero, minion);
 			end);
+			self:Orbwalk();
 		end
 	end
 
-	function __Orbwalker:Clear()
-		self.DamageOnMinions = {};
-		self.EnemyMinionsInRange = {};
-		self.MonstersInRange = {};
-		self.UnkillableMinions = {};
-		self.LastHitMinions = {};
-		self.LastHitMinion = nil;
-		self.AlmostLastHitMinions = {};
-		self.AlmostLastHitMinion = nil;
-		self.LaneClearMinions = {};
-		self.LaneClearMinion = nil;
-		self.CustomMissileSpeed = nil;
-		self.CustomWindUpTime = nil;
+	function __Orbwalker:Orbwalk()
+		if Game.IsChatOpen() or (not Game.IsOnTop()) then
+			return;
+		end
+		if self.MyHeroCanAttack then
+			local target = self:GetTarget();
+			if target ~= nil then
+				local args = {
+					Target = target,
+					Process = true,
+				};
+				for i, cb in ipairs(self.OnPreAttackCallbacks) do
+					cb(args);
+				end
+				if args.Process and args.Target ~= nil then
+					self.LastAutoAttackSent = Game.Timer();
+					Control.Attack(args.Target);
+					self.HoldKey = false;
+					return;
+				end
+			end
+		end
+		self:Move();
+	end
+
+	function __Orbwalker:Move()
+		if not self.MyHeroCanMove then
+			return;
+		end
+		local MovementDelay = self.Menu.General.MovementDelay:Value() / 1000;
+		if Game.Timer() - self.LastMovementSent <= MovementDelay then
+			return;
+		end
+		if (not self.Menu.General.FastKiting:Value()) and Game.Timer() - self.LastAutoAttackSent <= MovementDelay then
+			return;
+		end
+		local position = self:GetMovementPosition();
+		local movePosition = Utilities:IsInRange(myHero, position, 100) and myHero.pos:Extend(position, 100) or position;
+		local HoldRadius = self.Menu.General.HoldRadius:Value();
+		local move = false;
+		local hold = false;
+		if HoldRadius > 0 then
+			if Utilities:GetDistanceSquared(myHero, position) > HoldRadius * HoldRadius then
+				move = true;
+			else
+				hold = true;
+				--Hold
+			end
+		else
+			move = true;
+		end
+		if move then
+			local args = {
+				Target = movePosition,
+				Process = true,
+			};
+			for i, cb in ipairs(self.OnPreMovementCallbacks) do
+				cb(args);
+			end
+			if args.Process and args.Target ~= nil then
+				self.LastMovementSent = Game.Timer();
+				Control.Move(movePosition);
+				return;
+			end
+		end
+		if hold then
+			if not self.HoldKey then
+				Control.KeyDown(72);
+				self.HoldKey = true;
+				self.LastHoldKey = Game.Timer();
+			else
+				if self.LastHoldKey > 0 and Game.Timer() - self.LastHoldKey > 0.15 then
+					self.LastHoldKey = 0;
+					Control.KeyUp(72);
+				end
+			end
+		end
 	end
 
 	function __Orbwalker:OnDraw()
@@ -1514,17 +1663,12 @@ class "__Orbwalker"
 		end
 		if self.Menu.Drawings.LastHittableMinions:Value() then
 			if self.LastHitMinion ~= nil then
-				Draw.Circle(self.LastHitMinion.pos, 100, COLOR_WHITE);
+				Draw.Circle(self.LastHitMinion.pos, math.max(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
 			end
 			if self.AlmostLastHitMinion ~= nil and not Utilities:IdEquals(self.AlmostLastHitMinion, self.LastHitMinion) then
-				Draw.Circle(self.AlmostLastHitMinion.pos, 100, COLOR_ORANGE_RED);
+				Draw.Circle(self.AlmostLastHitMinion.pos, math.max(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
-		local target = self:GetTarget();
-		if target ~= nil then
-			Draw.Circle(target.pos, 100, COLOR_RED);
-		end
-		Draw.Text("CanMove: " .. tostring(self:CanMove()) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", Combo: " .. tostring(self:HasMode(ORBWALKER_MODE_COMBO)), myHero.pos:To2D());
 	end
 
 	function __Orbwalker:GetUnit(unit)
@@ -1533,7 +1677,7 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
-		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.1 + Utilities:GetLatency() then
+		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
 			return false;
 		end
 		if --[[ self:GetState(unit) == STATE_WINDDOWN or ]]self:GetState(unit) == STATE_ATTACK then
@@ -1554,7 +1698,7 @@ class "__Orbwalker"
 		if self.DisableAutoAttackBuffs[unit.charName] ~= nil and self.DisableAutoAttackBuffs[unit.charName](unit) then
 			return false;
 		end
-		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.1 + Utilities:GetLatency() then
+		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
 			return false;
 		end
 		return self:CanIssueOrder(unit);
@@ -1590,11 +1734,6 @@ class "__Orbwalker"
 	function __Orbwalker:GetEndTime(unit)
 		unit = self:GetUnit(unit);
 		return unit.attackData.endTime;
-	end
-
-	function __Orbwalker:GetLastAutoAttack(unit)
-		unit = self:GetUnit(unit);
-		return self:GetEndTime(unit) - self:GetAnimationTime(unit);
 	end
 
 	function __Orbwalker:GetWindUpTime(unit, target)
@@ -1751,7 +1890,10 @@ class "__Orbwalker"
 		return (self.TargetByType[t] ~= nil) and self.TargetByType[t]() or nil;
 	end
 
-	function __Orbwalker:GetTargetPosition()
+	function __Orbwalker:GetMovementPosition()
+		if self.ForceMovement ~= nil then
+			return self.ForceMovement;
+		end
 		return mousePos;
 	end
 
@@ -1881,10 +2023,25 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetAutoAttackDamage(minion)
+		if self.StaticAutoAttackDamage == nil then
+			self.StaticAutoAttackDamage = Damage:GetStaticAutoAttackDamage(myHero, true);
+		end
 		if self.DamageOnMinions[minion.networkID] == nil then
-			self.DamageOnMinions[minion.networkID] = Damage:GetAutoAttackDamage(myHero, minion);
+			self.DamageOnMinions[minion.networkID] = Damage:GetHeroAutoAttackDamage(myHero, minion, self.StaticAutoAttackDamage);
 		end
 		return self.DamageOnMinions[minion.networkID];
+	end
+
+	function __Orbwalker:OnUnkillableMinion(cb)
+		table.insert(self.OnUnkillableMinionCallbacks, cb);
+	end
+
+	function __Orbwalker:OnPreAttack(cb)
+		table.insert(self.OnPreAttackCallbacks, cb);
+	end
+
+	function __Orbwalker:OnPreMovement(cb)
+		table.insert(self.OnPreMovement, cb);
 	end
 
 class "__OrbwalkerMinion"
@@ -1914,7 +2071,7 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsLaneClearable()
-		if Orbwalker.OnlyLastHit then
+		if OW.OnlyLastHit then
 			return false;
 		end
 		if self.LaneClearHealth == self.Minion.Health then
@@ -1928,5 +2085,9 @@ class "__OrbwalkerMinion"
 	end
 
 if _G.OW == nil then
+	-- Disabling GoS orbwalker
+	_G.Orbwalker.Enabled:Value(false);
+	_G.Orbwalker.Drawings.Enabled:Value(false);
+
 	_G.OW = __Orbwalker();
 end
