@@ -33,12 +33,14 @@ end
 Callback.Add('Load', function()
 	local Loaded = false;
 	local id = Callback.Add('Tick', function()
-		if Game.Timer() > 30 and not Loaded then
-			for i, cb in ipairs(LoadCallbacks) do
-				cb();
+		if not Loaded then
+			if Game.HeroCount() > 1 or Game.Timer() > 30 then
+				for i, cb in ipairs(LoadCallbacks) do
+					cb();
+				end
+				Loaded = true;
+				Callback.Del('Tick', id);
 			end
-			Loaded = true;
-			Callback.Del('Tick', id);
 		end
 	end);
 end);
@@ -500,6 +502,10 @@ class "__Utilities"
 		return false; --TODO
 	end
 
+	function __Utilities:GetClickDelay()
+		return 0.03;
+	end
+
 class "__Linq"
 	function __Linq:__init()
 
@@ -835,23 +841,6 @@ class "__HealthPrediction"
 		return health;
 	end
 
-	function __HealthPrediction:GetPredictions(minions) -- [networkID => { Minion = GameObject, Time = time }]
-		for networkID, value in pairs(minions) do
-			value.Health = Utilities:TotalShieldHealth(value.Minion);
-		end
-
-		for i, attacks in pairs(self.IncomingAttacks) do
-			for j, attack in ipairs(attacks) do
-				local minion = minions[attack.Target.networkID];
-				if minion ~= nil then
-					minion.Health = minion.Health - attack:GetPredictedDamage(minion.Minion, minion.Time);
-				end
-			end
-		end
-
-		return minions;
-	end
-
 class "__IncomingAttack"
 	function __IncomingAttack:__init(source, targetHandle)
 		self.Source = source;
@@ -864,7 +853,7 @@ class "__IncomingAttack"
 		self.SourcePosition = self.Source.pos;
 		self.WindUpTime = self.Source.attackData.windUpTime;
 		self.AnimationTime = self.Source.attackData.animationTime;
-		self.StartTime = Game.Timer();
+		self.StartTime = self.Source.attackData.endTime - self.Source.attackData.animationTime;--Game.Timer();
 	end
 
 	function __IncomingAttack:GetAutoAttackDamage(target)
@@ -892,7 +881,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() - 0.1;
+			delay = delay + Utilities:GetLatency() - 0.01 + Utilities:GetClickDelay();
 			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - Game.Timer();
 			if timeTillHit <= -0.25 then
 				self.Arrived = true;
@@ -921,7 +910,7 @@ class "__IncomingAttack"
 
 class "__TargetSelector"
 	function __TargetSelector:__init()
-		self.Menu = MenuElement({ id = "TargetSelector", name = "Target Selector", type = MENU });
+		self.Menu = MenuElement({ id = "TargetSelector", name = "IC's Target Selector", type = MENU });
 		self.EnemiesAdded = {};
 		self.SelectedTarget = nil;
 		self.Modes = {
@@ -1677,17 +1666,25 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
-		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
-			return false;
+		local state = self:GetState(unit);
+		if state == STATE_WINDDOWN then
+			return true;
 		end
-		if --[[ self:GetState(unit) == STATE_WINDDOWN or ]]self:GetState(unit) == STATE_ATTACK then
+		if unit.isMe then
+			if Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+				if state == STATE_ATTACK then
+					return false;
+				end
+			end
+		end
+		if state == STATE_ATTACK then
 			return true;
 		end
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() / 1000;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
-		if Game.Timer() - (self:GetEndTime(unit) + ExtraWindUpTime - self:GetWindDownTime(unit)) >= 0 then
+		if Game.Timer() - (self:GetEndTime(unit) + ExtraWindUpTime - Utilities:GetLatency() - self:GetWindDownTime(unit)) >= 0 then
 			return true;
 		end
 		return false;
@@ -1698,8 +1695,13 @@ class "__Orbwalker"
 		if self.DisableAutoAttackBuffs[unit.charName] ~= nil and self.DisableAutoAttackBuffs[unit.charName](unit) then
 			return false;
 		end
-		if unit.isMe and Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
-			return false;
+		if unit.isMe then
+			if Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+				local state = self:GetState(unit);
+				if state == STATE_WINDUP or state == STATE_WINDDOWN then
+					return false;
+				end
+			end
 		end
 		return self:CanIssueOrder(unit);
 	end
@@ -1709,7 +1711,7 @@ class "__Orbwalker"
 		if self:GetState(unit) == STATE_ATTACK then
 			return true;
 		end
-		return Game.Timer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 >= 0;
+		return Game.Timer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 + Utilities:GetClickDelay() >= 0;
 	end
 
 	function __Orbwalker:GetState(unit)
@@ -2074,14 +2076,11 @@ class "__OrbwalkerMinion"
 		if OW.OnlyLastHit then
 			return false;
 		end
-		if self.LaneClearHealth == self.Minion.Health then
-			return true;
-		end
 		local percentMod = 2;
 		if false --[[TODO]] then
 			percentMod = percentMod * 2;
 		end
-		return self.LaneClearHealth > percentMod * OW:GetAutoAttackDamage(self.Minion);
+		return self.LaneClearHealth > percentMod * OW:GetAutoAttackDamage(self.Minion) or math.abs(self.LaneClearHealth - self.Minion.health) < 1E-12;
 	end
 
 if _G.OW == nil then
