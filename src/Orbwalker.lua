@@ -54,16 +54,16 @@ local LOCAL_HK_SUMMONER_1	= HK_SUMMONER_1;
 local LOCAL_HK_SUMMONER_2	= HK_SUMMONER_2;
 local LOCAL_HK_TCO			= HK_TCO;
 local LOCAL_HK_LUS			= HK_LUS;
-local LOCAL_Obj_AI_SpawnPoint	= Obj_AI_SpawnPoint;
-local LOCAL_Obj_AI_Camp			= Obj_AI_Camp;
-local LOCAL_Obj_AI_Barracks		= Obj_AI_Barracks;
-local LOCAL_Obj_AI_Hero			= Obj_AI_Hero;
-local LOCAL_Obj_AI_Minion		= Obj_AI_Minion;
-local LOCAL_Obj_AI_Turret		= Obj_AI_Turret;
-local LOCAL_Obj_AI_LineMissle	= Obj_AI_LineMissle;
-local LOCAL_Obj_AI_Shop			= Obj_AI_Shop;
-local LOCAL_Obj_HQ = "obj_HQ";
-local LOCAL_Obj_GeneralParticleEmitter = "obj_GeneralParticleEmitter";
+local LOCAL_Obj_AI_SpawnPoint			= Obj_AI_SpawnPoint;
+local LOCAL_Obj_AI_Camp					= Obj_AI_Camp;
+local LOCAL_Obj_AI_Barracks				= Obj_AI_Barracks;
+local LOCAL_Obj_AI_Hero					= Obj_AI_Hero;
+local LOCAL_Obj_AI_Minion				= Obj_AI_Minion;
+local LOCAL_Obj_AI_Turret				= Obj_AI_Turret;
+local LOCAL_Obj_AI_LineMissle			= Obj_AI_LineMissle;
+local LOCAL_Obj_AI_Shop					= Obj_AI_Shop;
+local LOCAL_Obj_HQ 						= "obj_HQ";
+local LOCAL_Obj_GeneralParticleEmitter	= "obj_GeneralParticleEmitter";
 
 local max = math.max;
 local min = math.min;
@@ -78,20 +78,29 @@ local COLOR_WHITE				= LocalDrawColor(255, 255, 255, 255);
 local COLOR_BLACK				= LocalDrawColor(255, 0, 0, 0);
 local COLOR_RED				= LocalDrawColor(255, 255, 0, 0);
 
-local vvDAMAGE_TYPE_PHYSICAL	= 0;
-local vvDAMAGE_TYPE_MAGICAL		= 1;
-local vvDAMAGE_TYPE_TRUE		= 2;
+local DAMAGE_TYPE_PHYSICAL	= 0;
+local DAMAGE_TYPE_MAGICAL	= 1;
+local DAMAGE_TYPE_TRUE		= 2;
 
-local TARGET_SELECTOR_MODE_AUTO						= 1;
+local TARGET_SELECTOR_MODE_AUTO							= 1;
 local TARGET_SELECTOR_MODE_MOST_STACK					= 2;
 local TARGET_SELECTOR_MODE_MOST_ATTACK_DAMAGE			= 3;
 local TARGET_SELECTOR_MODE_MOST_MAGIC_DAMAGE			= 4;
-local TARGET_SELECTOR_MODE_LEAST_HEALTH				= 5;
-local TARGET_SELECTOR_MODE_CLOSEST					= 6;
-local TARGET_SELECTOR_MODE_HIGHEST_PRIORITY			= 7;
-local TARGET_SELECTOR_MODE_LESS_ATTACK				= 8;
+local TARGET_SELECTOR_MODE_LEAST_HEALTH					= 5;
+local TARGET_SELECTOR_MODE_CLOSEST						= 6;
+local TARGET_SELECTOR_MODE_HIGHEST_PRIORITY				= 7;
+local TARGET_SELECTOR_MODE_LESS_ATTACK					= 8;
 local TARGET_SELECTOR_MODE_LESS_CAST					= 9;
 local TARGET_SELECTOR_MODE_NEAR_MOUSE					= 10;
+
+local Linq = nil;
+local Utilities = nil;
+local BuffManager = nil;
+local ItemManager = nil;
+local Damage = nil;
+local ObjectManager = nil;
+local TargetSelector = nil;
+local OW = nil;
 
 local LoadCallbacks = {};
 _G.AddLoadCallback = function(cb)
@@ -591,17 +600,15 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetMinions()
 		local result = {};
-		if LocalGameMinionCount() > 0 then
-			for i = 1, LocalGameMinionCount() do
-				local minion = LocalGameMinion(i);
-				if Utilities:IsValidTarget(minion) then
-					if Utilities:IsOtherMinion(minion) then
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) then
+				if Utilities:IsOtherMinion(minion) then
 
-					elseif Utilities:IsMonster(minion) then
+				elseif Utilities:IsMonster(minion) then
 
-					else
-						Linq:Add(result, minion);
-					end
+				else
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -610,17 +617,15 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetAllyMinions()
 		local result = {};
-		if LocalGameMinionCount() > 0 then
-			for i = 1, LocalGameMinionCount() do
-				local minion = LocalGameMinion(i);
-				if Utilities:IsValidTarget(minion) and minion.isAlly then
-					if Utilities:IsOtherMinion(minion) then
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) and minion.isAlly then
+				if Utilities:IsOtherMinion(minion) then
 
-					elseif Utilities:IsMonster(minion) then
+				elseif Utilities:IsMonster(minion) then
 
-					else
-						Linq:Add(result, minion);
-					end
+				else
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -629,17 +634,15 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetEnemyMinions()
 		local result = {};
-		if LocalGameMinionCount() > 0 then
-			for i = 1, LocalGameMinionCount() do
-				local minion = LocalGameMinion(i);
-				if Utilities:IsValidTarget(minion) and minion.isEnemy then
-					if Utilities:IsOtherMinion(minion) then
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) and minion.isEnemy then
+				if Utilities:IsOtherMinion(minion) then
 
-					elseif Utilities:IsMonster(minion) then
+				elseif Utilities:IsMonster(minion) then
 
-					else
-						Linq:Add(result, minion);
-					end
+				else
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -648,13 +651,11 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherMinions()
 		local result = {};
-		if LocalGameWardCount() > 0 then
-			for i = 1, LocalGameWardCount() do
-				local minion = LocalGameWard(i);
-				if Utilities:IsValidTarget(minion) then
-					if Utilities:IsOtherMinion(minion) then
-						Linq:Add(result, minion);
-					end
+		for i = 1, LocalGameWardCount() do
+			local minion = LocalGameWard(i);
+			if Utilities:IsValidTarget(minion) then
+				if Utilities:IsOtherMinion(minion) then
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -663,13 +664,11 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherAllyMinions()
 		local result = {};
-		if LocalGameWardCount() > 0 then
-			for i = 1, LocalGameWardCount() do
-				local minion = LocalGameWard(i);
-				if Utilities:IsValidTarget(minion) and minion.isAlly then
-					if Utilities:IsOtherMinion(minion) then
-						Linq:Add(result, minion);
-					end
+		for i = 1, LocalGameWardCount() do
+			local minion = LocalGameWard(i);
+			if Utilities:IsValidTarget(minion) and minion.isAlly then
+				if Utilities:IsOtherMinion(minion) then
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -678,13 +677,11 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherEnemyMinions()
 		local result = {};
-		if LocalGameWardCount() > 0 then
-			for i = 1, LocalGameWardCount() do
-				local minion = LocalGameWard(i);
-				if Utilities:IsValidTarget(minion) and minion.isEnemy then
-					if Utilities:IsOtherMinion(minion) then
-						Linq:Add(result, minion);
-					end
+		for i = 1, LocalGameWardCount() do
+			local minion = LocalGameWard(i);
+			if Utilities:IsValidTarget(minion) and minion.isEnemy then
+				if Utilities:IsOtherMinion(minion) then
+					Linq:Add(result, minion);
 				end
 			end
 		end
@@ -693,16 +690,14 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetMonsters()
 		local result = {};
-		if LocalGameMinionCount() > 0 then
-			for i = 1, LocalGameMinionCount() do
-				local minion = LocalGameMinion(i);
-				if Utilities:IsValidTarget(minion) then
-					if Utilities:IsOtherMinion(minion) then
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) then
+				if Utilities:IsOtherMinion(minion) then
 
-					elseif Utilities:IsMonster(minion) then
-						Linq:Add(result, minion);
-					else
-					end
+				elseif Utilities:IsMonster(minion) then
+					Linq:Add(result, minion);
+				else
 				end
 			end
 		end
@@ -744,12 +739,10 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetTurrets()
 		local result = {};
-		if LocalGameTurretCount() > 0 then
-			for i = 1, LocalGameTurretCount() do
-				local turret = LocalGameTurret(i);
-				if Utilities:IsValidTarget(turret) then
-					Linq:Add(result, turret);
-				end
+		for i = 1, LocalGameTurretCount() do
+			local turret = LocalGameTurret(i);
+			if Utilities:IsValidTarget(turret) then
+				Linq:Add(result, turret);
 			end
 		end
 		return result;
@@ -757,12 +750,10 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetAllyTurrets()
 		local result = {};
-		if LocalGameTurretCount() > 0 then
-			for i = 1, LocalGameTurretCount() do
-				local turret = LocalGameTurret(i);
-				if Utilities:IsValidTarget(turret) and turret.isAlly then
-					Linq:Add(result, turret);
-				end
+		for i = 1, LocalGameTurretCount() do
+			local turret = LocalGameTurret(i);
+			if Utilities:IsValidTarget(turret) and turret.isAlly then
+				Linq:Add(result, turret);
 			end
 		end
 		return result;
@@ -770,12 +761,10 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetEnemyTurrets()
 		local result = {};
-		if LocalGameTurretCount() > 0 then
-			for i = 1, LocalGameTurretCount() do
-				local turret = LocalGameTurret(i);
-				if Utilities:IsValidTarget(turret) and turret.isEnemy then
-					Linq:Add(result, turret);
-				end
+		for i = 1, LocalGameTurretCount() do
+			local turret = LocalGameTurret(i);
+			if Utilities:IsValidTarget(turret) and turret.isEnemy then
+				Linq:Add(result, turret);
 			end
 		end
 		return result;
@@ -1348,18 +1337,18 @@ if not _G.iSDK_Loaded then
 	_G.iSDK_Loaded = true;
 end
 
-ORBWALKER_MODE_NONE				= -1;
-ORBWALKER_MODE_COMBO			= 0;
-ORBWALKER_MODE_HARASS			= 1;
-ORBWALKER_MODE_LANECLEAR		= 2;
-ORBWALKER_MODE_JUNGLECLEAR		= 3;
-ORBWALKER_MODE_LASTHIT			= 4;
-ORBWALKER_MODE_FLEE				= 5;
+local ORBWALKER_MODE_NONE				= -1;
+local ORBWALKER_MODE_COMBO				= 0;
+local ORBWALKER_MODE_HARASS				= 1;
+local ORBWALKER_MODE_LANECLEAR			= 2;
+local ORBWALKER_MODE_JUNGLECLEAR		= 3;
+local ORBWALKER_MODE_LASTHIT			= 4;
+local ORBWALKER_MODE_FLEE				= 5;
 
-ORBWALKER_TARGET_TYPE_HERO			= 0;
-ORBWALKER_TARGET_TYPE_MONSTER		= 1;
-ORBWALKER_TARGET_TYPE_MINION		= 2;
-ORBWALKER_TARGET_TYPE_STRUCTURE		= 3;
+local ORBWALKER_TARGET_TYPE_HERO			= 0;
+local ORBWALKER_TARGET_TYPE_MONSTER			= 1;
+local ORBWALKER_TARGET_TYPE_MINION			= 2;
+local ORBWALKER_TARGET_TYPE_STRUCTURE		= 3;
 
 class "__Orbwalker"
 	function __Orbwalker:__init()
@@ -2182,10 +2171,11 @@ class "__OrbwalkerMinion"
 		return self.LaneClearHealth > percentMod * OW:GetAutoAttackDamage(self.Minion) or abs(self.LaneClearHealth - self.Minion.health) < 1E-12;
 	end
 
-if _G.OW == nil then
+if not _G.ICOrbwalker then
 	-- Disabling GoS orbwalker
 	_G.Orbwalker.Enabled:Value(false);
 	_G.Orbwalker.Drawings.Enabled:Value(false);
 
-	_G.OW = __Orbwalker();
+	OW = __Orbwalker();
+	_G.ICOrbwalker = true;
 end
