@@ -1,40 +1,108 @@
 iSDK_Version = 0.1;
 
+local LocalDrawColor		= Draw.Color;
+local LocalDrawCircle		= Draw.Circle;
+local LocalControlMove		= Control.Move;
+local LocalControlAttack	= Control.Attack;
+local LocalControlKeyUp		= Control.KeyUp;
+local LocalControlKeyDown	= Control.KeyDown;
+local LocalGameLatency		= Game.Latency;
+local LocalGameTimer		= Game.Timer;
+local LocalGameHeroCount 	= Game.HeroCount;
+local LocalGameHero 		= Game.Hero;
+local LocalGameMinionCount 	= Game.MinionCount;
+local LocalGameMinion 		= Game.Minion;
+local LocalGameTurretCount 	= Game.TurretCount;
+local LocalGameTurret 		= Game.Turret;
+local LocalGameWardCount 	= Game.WardCount;
+local LocalGameWard 		= Game.Ward;
+local LocalGameObjectCount 	= Game.ObjectCount;
+local LocalGameObject		= Game.Object;
+local LocalGameIsChatOpen	= Game.IsChatOpen;
+local LocalGameIsOnTop		= Game.IsOnTop;
+local LocalTableInsert		= table.insert;
+local LocalTableSort		= table.sort;
+local LocalTableRemove		= table.remove;
+local LocalPairs			= pairs;
+local LOCAL_STATE_UNKNOWN	= STATE_UNKNOWN;
+local LOCAL_STATE_ATTACK	= STATE_ATTACK;
+local LOCAL_STATE_WINDUP	= STATE_WINDUP;
+local LOCAL_STATE_WINDDOWN	= STATE_WINDDOWN;
+local LOCAL_ITEM_1			= ITEM_1;
+local LOCAL_ITEM_2			= ITEM_2;
+local LOCAL_ITEM_3			= ITEM_3;
+local LOCAL_ITEM_4			= ITEM_4;
+local LOCAL_ITEM_5			= ITEM_5;
+local LOCAL_ITEM_6			= ITEM_6;
+local LOCAL_ITEM_7			= ITEM_7;
+local LOCAL_Q				= _Q;
+local LOCAL_W				= _W;
+local LOCAL_E				= _E;
+local LOCAL_R				= _R;
+local LOCAL_HK_Q			= HK_Q;
+local LOCAL_HK_W			= HK_W;
+local LOCAL_HK_E			= HK_E;
+local LOCAL_HK_R			= HK_R;
+local LOCAL_HK_ITEM_1		= HK_ITEM_1;
+local LOCAL_HK_ITEM_2		= HK_ITEM_2;
+local LOCAL_HK_ITEM_3		= HK_ITEM_3;
+local LOCAL_HK_ITEM_4		= HK_ITEM_4;
+local LOCAL_HK_ITEM_5		= HK_ITEM_5;
+local LOCAL_HK_ITEM_6		= HK_ITEM_6;
+local LOCAL_HK_ITEM_7		= HK_ITEM_7;
+local LOCAL_HK_SUMMONER_1	= HK_SUMMONER_1;
+local LOCAL_HK_SUMMONER_2	= HK_SUMMONER_2;
+local LOCAL_HK_TCO			= HK_TCO;
+local LOCAL_HK_LUS			= HK_LUS;
+local LOCAL_Obj_AI_SpawnPoint	= Obj_AI_SpawnPoint;
+local LOCAL_Obj_AI_Camp			= Obj_AI_Camp;
+local LOCAL_Obj_AI_Barracks		= Obj_AI_Barracks;
+local LOCAL_Obj_AI_Hero			= Obj_AI_Hero;
+local LOCAL_Obj_AI_Minion		= Obj_AI_Minion;
+local LOCAL_Obj_AI_Turret		= Obj_AI_Turret;
+local LOCAL_Obj_AI_LineMissle	= Obj_AI_LineMissle;
+local LOCAL_Obj_AI_Shop			= Obj_AI_Shop;
+local LOCAL_Obj_HQ = "obj_HQ";
+local LOCAL_Obj_GeneralParticleEmitter = "obj_GeneralParticleEmitter";
+
+local max = math.max;
+local min = math.min;
+local sqrt = math.sqrt;
+local huge = math.huge;
+local abs = math.abs;
+
 -- _G Globals
-Obj_HQ = "obj_HQ";
-Obj_GeneralParticleEmitter = "obj_GeneralParticleEmitter";
+local COLOR_LIGHT_GREEN		= LocalDrawColor(255, 144, 238, 144);
+local COLOR_ORANGE_RED		= LocalDrawColor(255, 255, 69, 0);
+local COLOR_WHITE				= LocalDrawColor(255, 255, 255, 255);
+local COLOR_BLACK				= LocalDrawColor(255, 0, 0, 0);
+local COLOR_RED				= LocalDrawColor(255, 255, 0, 0);
 
-COLOR_LIGHT_GREEN		= Draw.Color(255, 144, 238, 144);
-COLOR_ORANGE_RED		= Draw.Color(255, 255, 69, 0);
-COLOR_WHITE				= Draw.Color(255, 255, 255, 255);
-COLOR_BLACK				= Draw.Color(255, 0, 0, 0);
-COLOR_RED				= Draw.Color(255, 255, 0, 0);
+local vvDAMAGE_TYPE_PHYSICAL	= 0;
+local vvDAMAGE_TYPE_MAGICAL		= 1;
+local vvDAMAGE_TYPE_TRUE		= 2;
 
-DAMAGE_TYPE_PHYSICAL	= 0;
-DAMAGE_TYPE_MAGICAL		= 1;
-DAMAGE_TYPE_TRUE		= 2;
-
-TARGET_SELECTOR_MODE_AUTO						= 1;
-TARGET_SELECTOR_MODE_MOST_STACK					= 2;
-TARGET_SELECTOR_MODE_MOST_ATTACK_DAMAGE			= 3;
-TARGET_SELECTOR_MODE_MOST_MAGIC_DAMAGE			= 4;
-TARGET_SELECTOR_MODE_LEAST_HEALTH				= 5;
-TARGET_SELECTOR_MODE_CLOSEST					= 6;
-TARGET_SELECTOR_MODE_HIGHEST_PRIORITY			= 7;
-TARGET_SELECTOR_MODE_LESS_ATTACK				= 8;
-TARGET_SELECTOR_MODE_LESS_CAST					= 9;
-TARGET_SELECTOR_MODE_NEAR_MOUSE					= 10;
+local TARGET_SELECTOR_MODE_AUTO						= 1;
+local TARGET_SELECTOR_MODE_MOST_STACK					= 2;
+local TARGET_SELECTOR_MODE_MOST_ATTACK_DAMAGE			= 3;
+local TARGET_SELECTOR_MODE_MOST_MAGIC_DAMAGE			= 4;
+local TARGET_SELECTOR_MODE_LEAST_HEALTH				= 5;
+local TARGET_SELECTOR_MODE_CLOSEST					= 6;
+local TARGET_SELECTOR_MODE_HIGHEST_PRIORITY			= 7;
+local TARGET_SELECTOR_MODE_LESS_ATTACK				= 8;
+local TARGET_SELECTOR_MODE_LESS_CAST					= 9;
+local TARGET_SELECTOR_MODE_NEAR_MOUSE					= 10;
 
 local LoadCallbacks = {};
 _G.AddLoadCallback = function(cb)
-	table.insert(LoadCallbacks, cb);
+	LocalTableInsert(LoadCallbacks, cb);
 end
 
 Callback.Add('Load', function()
 	local Loaded = false;
 	local id = Callback.Add('Tick', function()
 		if not Loaded then
-			if Game.HeroCount() > 1 or Game.Timer() > 30 then
+			if LocalGameHeroCount() > 1 or LocalGameTimer() > 30 then
 				for i = 1, #LoadCallbacks do
 					LoadCallbacks[i]();
 				end
@@ -45,12 +113,6 @@ Callback.Add('Load', function()
 	end);
 end);
 
-local max = math.max;
-local min = math.min;
-local sqrt = math.sqrt;
-local huge = math.huge;
-local abs = math.abs;
-
 class "__BuffManager"
 	function __BuffManager:__init()
 		self.CachedBuffStacks = {};
@@ -60,7 +122,7 @@ class "__BuffManager"
 	end
 
 	function __BuffManager:BuffIsValid(buff)
-		return buff ~= nil and buff.startTime <= Game.Timer() and buff.expireTime >= Game.Timer() and buff.count > 0;
+		return buff ~= nil and buff.startTime <= LocalGameTimer() and buff.expireTime >= LocalGameTimer() and buff.count > 0;
 	end
 
 	function __BuffManager:CacheBuffs(unit)
@@ -102,13 +164,13 @@ class "__BuffManager"
 class "__ItemManager"
 	function __ItemManager:__init()
 		self.ItemSlots = {
-			ITEM_1,
-			ITEM_2,
-			ITEM_3,
-			ITEM_4,
-			ITEM_5,
-			ITEM_6,
-			ITEM_7,
+			LOCAL_ITEM_1,
+			LOCAL_ITEM_2,
+			LOCAL_ITEM_3,
+			LOCAL_ITEM_4,
+			LOCAL_ITEM_5,
+			LOCAL_ITEM_6,
+			LOCAL_ITEM_7,
 		};
 		self.CachedItems = {};
 		Callback.Add('Tick', function()
@@ -189,11 +251,11 @@ class "__Damage"
 			bonusPenetrationPercent = from.bonusArmorPenPercent;
 
 			--  Minions return wrong percent values.
-			if from.type == Obj_AI_Minion then
+			if from.type == LOCAL_Obj_AI_Minion then
 				penetrationFlat = 0;
 				penetrationPercent = 0;
 				bonusPenetrationPercent = 0;
-			elseif from.type == Obj_AI_Turret then
+			elseif from.type == LOCAL_Obj_AI_Turret then
 				penetrationFlat = 0;
 				penetrationPercent = (not Utilities:IsBaseTurret(from)) and 0.25 or 0.75;
 				bonusPenetrationPercent = 0;
@@ -230,8 +292,8 @@ class "__Damage"
 		local percentReceived = 1;
 		local flatPassive = 0;
 
-		local fromIsMinion = from.type == Obj_AI_Minion;
-		local targetIsMinion = target.type == Obj_AI_Minion;
+		local fromIsMinion = from.type == LOCAL_Obj_AI_Minion;
+		local targetIsMinion = target.type == LOCAL_Obj_AI_Minion;
 
 		local percentPassive = 1;
 		if fromIsMinion and targetIsMinion then
@@ -268,7 +330,7 @@ class "__Damage"
 		if targetIsMinion and Utilities:IsOtherMinion(target) then
 			return 1;
 		end
-		local targetIsMinion = target.type == Obj_AI_Minion;
+		local targetIsMinion = target.type == LOCAL_Obj_AI_Minion;
 		local RawTotal = tonumber(static.RawTotal);
 		local RawPhysical = tonumber(static.RawPhysical);
 		local RawMagical = tonumber(static.RawMagical);
@@ -304,8 +366,8 @@ class "__Damage"
 		if from == nil or target == nil then
 			return 0;
 		end
-		if respectPassives and from.type == Obj_AI_Hero then
-			return self:GetHeroAutoAttackDamage(from, target, self:GetStaticAutoAttackDamage(from, target.type == Obj_AI_Minion));
+		if respectPassives and from.type == LOCAL_Obj_AI_Hero then
+			return self:GetHeroAutoAttackDamage(from, target, self:GetStaticAutoAttackDamage(from, target.type == LOCAL_Obj_AI_Minion));
 		end
 		return self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, from.totalDamage, false, true);
 	end
@@ -339,14 +401,14 @@ class "__Utilities"
 			["SRUAP_Turret_Chaos4"] = true,
 		};
 		self.Obj_AI_Bases = {
-			[Obj_AI_Hero] = true,
-			[Obj_AI_Minion] = true,
-			[Obj_AI_Turret] = true,
+			[LOCAL_Obj_AI_Hero] = true,
+			[LOCAL_Obj_AI_Minion] = true,
+			[LOCAL_Obj_AI_Turret] = true,
 		};
 		self.Structures = {
-			[Obj_AI_Barracks] = true,
-			[Obj_AI_Turret] = true,
-			[Obj_HQ] = true,
+			[LOCAL_Obj_AI_Barracks] = true,
+			[LOCAL_Obj_AI_Turret] = true,
+			[LOCAL_Obj_HQ] = true,
 		};
 		self.CachedValidTargets = {};
 
@@ -367,9 +429,9 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetAutoAttackRange(from, target)
-		if from.type == Obj_AI_Minion then
+		if from.type == LOCAL_Obj_AI_Minion then
 			return 0;
-		elseif from.type == Obj_AI_Turret then
+		elseif from.type == LOCAL_Obj_AI_Turret then
 			return 775;
 		end
 		local range = from.range + from.boundingRadius + (target ~= nil and (target.boundingRadius - 30) or 35);
@@ -383,7 +445,7 @@ class "__Utilities"
 		if self.SpecialMelees[target.charName] ~= nil then
 			return self.SpecialMelees[target.charName](target);
 		end
-		if target.type == Obj_AI_Hero then
+		if target.type == LOCAL_Obj_AI_Hero then
 			return target.range <= 300;
 		else
 			return false;
@@ -481,7 +543,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetLatency()
-		return Game.Latency() * 0.001;
+		return LocalGameLatency() * 0.001;
 	end
 
 	function __Utilities:__IsValidTarget(target)
@@ -529,9 +591,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetMinions()
 		local result = {};
-		if Game.MinionCount() > 0 then
-			for i = 1, Game.MinionCount() do
-				local minion = Game.Minion(i);
+		if LocalGameMinionCount() > 0 then
+			for i = 1, LocalGameMinionCount() do
+				local minion = LocalGameMinion(i);
 				if Utilities:IsValidTarget(minion) then
 					if Utilities:IsOtherMinion(minion) then
 
@@ -547,12 +609,19 @@ class "__ObjectManager"
 	end
 
 	function __ObjectManager:GetAllyMinions()
-		local t = self:GetMinions();
 		local result = {};
-		for i = 1, #t do
-			local minion = t[i];
-			if minion.isAlly then
-				Linq:Add(result, minion);
+		if LocalGameMinionCount() > 0 then
+			for i = 1, LocalGameMinionCount() do
+				local minion = LocalGameMinion(i);
+				if Utilities:IsValidTarget(minion) and minion.isAlly then
+					if Utilities:IsOtherMinion(minion) then
+
+					elseif Utilities:IsMonster(minion) then
+
+					else
+						Linq:Add(result, minion);
+					end
+				end
 			end
 		end
 		return result;
@@ -560,11 +629,18 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetEnemyMinions()
 		local result = {};
-		local t = self:GetMinions();
-		for i = 1, #t do
-			local minion = t[i];
-			if minion.isEnemy then
-				Linq:Add(result, minion);
+		if LocalGameMinionCount() > 0 then
+			for i = 1, LocalGameMinionCount() do
+				local minion = LocalGameMinion(i);
+				if Utilities:IsValidTarget(minion) and minion.isEnemy then
+					if Utilities:IsOtherMinion(minion) then
+
+					elseif Utilities:IsMonster(minion) then
+
+					else
+						Linq:Add(result, minion);
+					end
+				end
 			end
 		end
 		return result;
@@ -572,9 +648,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherMinions()
 		local result = {};
-		if Game.WardCount() > 0 then
-			for i = 1, Game.WardCount() do
-				local minion = Game.Ward(i);
+		if LocalGameWardCount() > 0 then
+			for i = 1, LocalGameWardCount() do
+				local minion = LocalGameWard(i);
 				if Utilities:IsValidTarget(minion) then
 					if Utilities:IsOtherMinion(minion) then
 						Linq:Add(result, minion);
@@ -587,11 +663,14 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherAllyMinions()
 		local result = {};
-		local t = self:GetOtherMinions();
-		for i = 1, #t do
-			local minion = t[i];
-			if minion.isAlly then
-				Linq:Add(result, minion);
+		if LocalGameWardCount() > 0 then
+			for i = 1, LocalGameWardCount() do
+				local minion = LocalGameWard(i);
+				if Utilities:IsValidTarget(minion) and minion.isAlly then
+					if Utilities:IsOtherMinion(minion) then
+						Linq:Add(result, minion);
+					end
+				end
 			end
 		end
 		return result;
@@ -599,11 +678,14 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetOtherEnemyMinions()
 		local result = {};
-		local t = self:GetOtherMinions();
-		for i = 1, #t do
-			local minion = t[i];
-			if minion.isEnemy then
-				Linq:Add(result, minion);
+		if LocalGameWardCount() > 0 then
+			for i = 1, LocalGameWardCount() do
+				local minion = LocalGameWard(i);
+				if Utilities:IsValidTarget(minion) and minion.isEnemy then
+					if Utilities:IsOtherMinion(minion) then
+						Linq:Add(result, minion);
+					end
+				end
 			end
 		end
 		return result;
@@ -611,9 +693,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetMonsters()
 		local result = {};
-		if Game.MinionCount() > 0 then
-			for i = 1, Game.MinionCount() do
-				local minion = Game.Minion(i);
+		if LocalGameMinionCount() > 0 then
+			for i = 1, LocalGameMinionCount() do
+				local minion = LocalGameMinion(i);
 				if Utilities:IsValidTarget(minion) then
 					if Utilities:IsOtherMinion(minion) then
 
@@ -629,8 +711,8 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetHeroes()
 		local result = {};
-		for i = 1, Game.HeroCount() do
-			local hero = Game.Hero(i);
+		for i = 1, LocalGameHeroCount() do
+			local hero = LocalGameHero(i);
 			if Utilities:IsValidTarget(hero) then
 				Linq:Add(result, hero);
 			end
@@ -640,10 +722,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetAllyHeroes()
 		local result = {};
-		local t = self:GetHeroes();
-		for i = 1, #t do
-			local hero = t[i];
-			if hero.isAlly then
+		for i = 1, LocalGameHeroCount() do
+			local hero = LocalGameHero(i);
+			if Utilities:IsValidTarget(hero) and hero.isAlly then
 				Linq:Add(result, hero);
 			end
 		end
@@ -652,10 +733,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetEnemyHeroes()
 		local result = {};
-		local t = self:GetHeroes();
-		for i = 1, #t do
-			local hero = t[i];
-			if hero.isEnemy then
+		for i = 1, LocalGameHeroCount() do
+			local hero = LocalGameHero(i);
+			if Utilities:IsValidTarget(hero) and hero.isEnemy then
 				Linq:Add(result, hero);
 			end
 		end
@@ -664,9 +744,9 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetTurrets()
 		local result = {};
-		if Game.TurretCount() > 0 then
-			for i = 1, Game.TurretCount() do
-				local turret = Game.Turret(i);
+		if LocalGameTurretCount() > 0 then
+			for i = 1, LocalGameTurretCount() do
+				local turret = LocalGameTurret(i);
 				if Utilities:IsValidTarget(turret) then
 					Linq:Add(result, turret);
 				end
@@ -677,11 +757,12 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetAllyTurrets()
 		local result = {};
-		local t = self:GetTurrets();
-		for i = 1, #t do
-			local turret = t[i];
-			if turret.isAlly then
-				Linq:Add(result, turret);
+		if LocalGameTurretCount() > 0 then
+			for i = 1, LocalGameTurretCount() do
+				local turret = LocalGameTurret(i);
+				if Utilities:IsValidTarget(turret) and turret.isAlly then
+					Linq:Add(result, turret);
+				end
 			end
 		end
 		return result;
@@ -689,11 +770,12 @@ class "__ObjectManager"
 
 	function __ObjectManager:GetEnemyTurrets()
 		local result = {};
-		local t = self:GetTurrets();
-		for i = 1, #t do
-			local turret = t[i];
-			if turret.isEnemy then
-				Linq:Add(result, turret);
+		if LocalGameTurretCount() > 0 then
+			for i = 1, LocalGameTurretCount() do
+				local turret = LocalGameTurret(i);
+				if Utilities:IsValidTarget(turret) and turret.isEnemy then
+					Linq:Add(result, turret);
+				end
 			end
 		end
 		return result;
@@ -724,7 +806,7 @@ class "__HealthPrediction"
 		end
 		local remove = {};
 		-- remove older attacks
-		for networkID, attacks in pairs(self.IncomingAttacks) do
+		for networkID, attacks in LocalPairs(self.IncomingAttacks) do
 			if #attacks > 0 then
 				for i = 1, #attacks do
 					if attacks[i]:ShouldRemove() then
@@ -746,7 +828,7 @@ class "__HealthPrediction"
 		local currentState = target.attackData.state;
 		local prevState = self.AlliesState[target.networkID];
 		if prevState ~= nil then
-			if prevState ~= STATE_WINDUP and currentState == STATE_WINDUP then
+			if prevState ~= LOCAL_STATE_WINDUP and currentState == LOCAL_STATE_WINDUP then
 				self:OnBasicAttack(target);
 			end
 		end
@@ -776,7 +858,7 @@ class "__HealthPrediction"
 
 	function __HealthPrediction:GetPrediction(target, time)
 		local health = Utilities:TotalShieldHealth(target);
-		for _, attacks in pairs(self.IncomingAttacks) do
+		for _, attacks in LocalPairs(self.IncomingAttacks) do
 			if #attacks > 0 then
 				for i = 1, #attacks do
 					local attack = attacks[i];
@@ -801,7 +883,7 @@ class "__IncomingAttack"
 		self.SourcePosition = self.Source.pos;
 		self.WindUpTime = self.Source.attackData.windUpTime;
 		self.AnimationTime = self.Source.attackData.animationTime;
-		self.StartTime = self.Source.attackData.endTime - self.Source.attackData.animationTime;--Game.Timer();
+		self.StartTime = self.Source.attackData.endTime - self.Source.attackData.animationTime;--LocalGameTimer();
 	end
 
 	function __IncomingAttack:GetAutoAttackDamage(target)
@@ -823,14 +905,14 @@ class "__IncomingAttack"
 	end
 
 	function __IncomingAttack:ShouldRemove()
-		return Game.Timer() - self.StartTime > 3 or self.Arrived;
+		return LocalGameTimer() - self.StartTime > 3 or self.Arrived;
 	end
 
 	function __IncomingAttack:GetPredictedDamage(target, delay)
 		local damage = 0;
 		if not self:ShouldRemove() then
 			delay = delay + Utilities:GetLatency() - 0.01 + Utilities:GetClickDelay();
-			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - Game.Timer();
+			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - LocalGameTimer();
 			if timeTillHit <= -0.25 then
 				self.Arrived = true;
 			end
@@ -1026,7 +1108,7 @@ class "__TargetSelector"
 		};
 		self.Selector = {
 			[TARGET_SELECTOR_MODE_AUTO] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / a.health;
 					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / b.health;
 					return first > second;
@@ -1034,7 +1116,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_STACK] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local firstStack = 1;
 					local secondStack = 1;
 					local t = self.BuffStackNames["All"];
@@ -1058,7 +1140,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_ATTACK_DAMAGE] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = a.totalDamage;
 					local second = b.totalDamage;
 					return first > second;
@@ -1066,7 +1148,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_MAGIC_DAMAGE] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = a.ap;
 					local second = b.ap;
 					return first > second;
@@ -1074,7 +1156,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LEAST_HEALTH] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = a.health;
 					local second = b.health;
 					return first < second;
@@ -1082,7 +1164,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_CLOSEST] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = Utilities:GetDistanceSquared(myHero, a);
 					local second = Utilities:GetDistanceSquared(myHero, b);
 					return first < second;
@@ -1090,7 +1172,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_HIGHEST_PRIORITY] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = self:GetPriority(a);
 					local second = self:GetPriority(b);
 					return first > second;
@@ -1098,7 +1180,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LESS_ATTACK] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, DAMAGE_TYPE_PHYSICAL, 100) / a.health;
 					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, DAMAGE_TYPE_PHYSICAL, 100) / b.health;
 					return first > second;
@@ -1106,7 +1188,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LESS_CAST] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, DAMAGE_TYPE_MAGICAL, 100) / a.health;
 					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, DAMAGE_TYPE_MAGICAL, 100) / b.health;
 					return first > second;
@@ -1114,7 +1196,7 @@ class "__TargetSelector"
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_NEAR_MOUSE] = function(targets, damageType)
-				table.sort(targets, function(a, b)
+				LocalTableSort(targets, function(a, b)
 					local first = Utilities:GetDistanceSquared(a, mousePos);
 					local second = Utilities:GetDistanceSquared(b, mousePos);
 					return first < second;
@@ -1131,9 +1213,9 @@ class "__TargetSelector"
 		self.Menu:MenuElement({ id = "Mode", name = "Mode", value = 1, drop = self.Modes });
 		self.Menu:MenuElement({ id = "Priorities", name = "Priorities", type = MENU });
 		local EnemyHeroes = {};
-		if Game.HeroCount() > 0 then
-			for i = 1, Game.HeroCount() do
-				local hero = Game.Hero(i);
+		if LocalGameHeroCount() > 0 then
+			for i = 1, LocalGameHeroCount() do
+				local hero = LocalGameHero(i);
 				if hero.isEnemy and not hero.isAlly then
 					Linq:Add(EnemyHeroes, hero);
 				end
@@ -1150,7 +1232,7 @@ class "__TargetSelector"
 			end
 			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = true, callback = function()
 				if self.Menu.Priorities.Reset:Value() then
-					for charName, _ in pairs(self.EnemiesAdded) do
+					for charName, _ in LocalPairs(self.EnemiesAdded) do
 						local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
 						self.Menu.Priorities[charName]:Value(priority);
 					end
@@ -1177,7 +1259,7 @@ class "__TargetSelector"
 	function __TargetSelector:OnDraw()
 		if self.Menu.Drawings.SelectedTarget:Value() then
 			if self.SelectedTarget ~= nil and Utilities:IsValidTarget(self.SelectedTarget) then
-				Draw.Circle(self.SelectedTarget.pos, 120, 4, COLOR_RED);
+				LocalDrawCircle(self.SelectedTarget.pos, 120, 4, COLOR_RED);
 			end
 		end
 	end
@@ -1285,12 +1367,8 @@ class "__Orbwalker"
 
 		self.DamageOnMinions = {};
 		self.EnemyMinionsInRange = {};
-		self.UnkillableMinions = {};
-		self.LastHitMinions = {};
 		self.LastHitMinion = nil;
-		self.AlmostLastHitMinions = {};
 		self.AlmostLastHitMinion = nil;
-		self.LaneClearMinions = {};
 		self.LaneClearMinion = nil;
 		self.CustomMissileSpeed = nil;
 		self.CustomWindUpTime = nil;
@@ -1464,9 +1542,9 @@ class "__Orbwalker"
 
 	function __Orbwalker:OnLoad()
 		self.HealthPrediction = __HealthPrediction();
-		if Game.ObjectCount() > 0 then
-			for i = 1, Game.ObjectCount() do
-				local object = Game.Object(i);
+		if LocalGameObjectCount() > 0 then
+			for i = 1, LocalGameObjectCount() do
+				local object = LocalGameObject(i);
 				if object ~= nil and object.isEnemy and Utilities:IsStructure(object) then
 					Linq:Add(self.EnemyStructures, object);
 				end
@@ -1519,12 +1597,8 @@ class "__Orbwalker"
 	function __Orbwalker:Clear()
 		self.DamageOnMinions = {};
 		self.EnemyMinionsInRange = {};
-		self.UnkillableMinions = {};
-		self.LastHitMinions = {};
 		self.LastHitMinion = nil;
-		self.AlmostLastHitMinions = {};
 		self.AlmostLastHitMinion = nil;
-		self.LaneClearMinions = {};
 		self.LaneClearMinion = nil;
 		self.CustomMissileSpeed = nil;
 		self.CustomWindUpTime = nil;
@@ -1557,7 +1631,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:Orbwalk()
-		if Game.IsChatOpen() or (not Game.IsOnTop()) then
+		if LocalGameIsChatOpen() or (not LocalGameIsOnTop()) then
 			return;
 		end
 		if self.MyHeroCanAttack then
@@ -1571,8 +1645,8 @@ class "__Orbwalker"
 					self.OnPreAttackCallbacks[i](args);
 				end
 				if args.Process and args.Target ~= nil then
-					self.LastAutoAttackSent = Game.Timer();
-					Control.Attack(args.Target);
+					self.LastAutoAttackSent = LocalGameTimer();
+					LocalControlAttack(args.Target);
 					self.HoldKey = false;
 					return;
 				end
@@ -1590,10 +1664,10 @@ class "__Orbwalker"
 			return;
 		end
 		local MovementDelay = self.Menu.General.MovementDelay:Value() * 0.001;
-		if Game.Timer() - self.LastMovementSent <= MovementDelay then
+		if LocalGameTimer() - self.LastMovementSent <= MovementDelay then
 			return;
 		end
-		if (not self.Menu.General.FastKiting:Value()) and Game.Timer() - self.LastAutoAttackSent <= MovementDelay then
+		if (not self.Menu.General.FastKiting:Value()) and LocalGameTimer() - self.LastAutoAttackSent <= MovementDelay then
 			return;
 		end
 		local position = self:GetMovementPosition();
@@ -1620,24 +1694,24 @@ class "__Orbwalker"
 				self.OnPreMovementCallbacks[i](args);
 			end
 			if args.Process and args.Target ~= nil then
-				self.LastMovementSent = Game.Timer();
+				self.LastMovementSent = LocalGameTimer();
 				if args.Target == mousePos then
-					Control.Move();
+					LocalControlMove();
 				else
-					Control.Move(args.Target);
+					LocalControlMove(args.Target);
 				end
 				return;
 			end
 		end
 		if hold then
 			if not self.HoldKey then
-				Control.KeyDown(72);
+				LocalControlKeyDown(72);
 				self.HoldKey = true;
-				self.LastHoldKey = Game.Timer();
+				self.LastHoldKey = LocalGameTimer();
 			else
-				if self.LastHoldKey > 0 and Game.Timer() - self.LastHoldKey > 0.15 then
+				if self.LastHoldKey > 0 and LocalGameTimer() - self.LastHoldKey > 0.15 then
 					self.LastHoldKey = 0;
-					Control.KeyUp(72);
+					LocalControlKeyUp(72);
 				end
 			end
 		end
@@ -1645,29 +1719,25 @@ class "__Orbwalker"
 
 	function __Orbwalker:OnDraw()
 		if self.Menu.Drawings.Range:Value() then
-			Draw.Circle(myHero.pos, Utilities:GetAutoAttackRange(myHero), COLOR_LIGHT_GREEN);
+			LocalDrawCircle(myHero.pos, Utilities:GetAutoAttackRange(myHero), COLOR_LIGHT_GREEN);
 		end
 		if self.Menu.Drawings.HoldRadius:Value() then
-			Draw.Circle(myHero.pos, self.Menu.General.HoldRadius:Value(), COLOR_LIGHT_GREEN);
+			LocalDrawCircle(myHero.pos, self.Menu.General.HoldRadius:Value(), COLOR_LIGHT_GREEN);
 		end
 		if self.Menu.Drawings.EnemyRange:Value() then
 			local t = ObjectManager:GetEnemyHeroes();
 			for i = 1, #t do
 				local enemy = t[i];
 				local range = Utilities:GetAutoAttackRange(enemy, myHero);
-				Draw.Circle(enemy.pos, range, Utilities:IsInRange(enemy, myHero, range) and COLOR_ORANGE_RED or COLOR_LIGHT_GREEN);
+				LocalDrawCircle(enemy.pos, range, Utilities:IsInRange(enemy, myHero, range) and COLOR_ORANGE_RED or COLOR_LIGHT_GREEN);
 			end
 		end
 		if self.Menu.Drawings.LastHittableMinions:Value() then
 			if self.LastHitMinion ~= nil then
-				Draw.Circle(self.LastHitMinion.pos, max(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
+				LocalDrawCircle(self.LastHitMinion.pos, max(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
 			end
 			if self.AlmostLastHitMinion ~= nil and not Utilities:IdEquals(self.AlmostLastHitMinion, self.LastHitMinion) then
-				Draw.Circle(self.AlmostLastHitMinion.pos, max(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
-			end
-			local target = self:GetTarget();
-			if target ~= nil then
-				Draw.Circle(target.pos, max(65, target.boundingRadius), COLOR_RED);
+				LocalDrawCircle(self.AlmostLastHitMinion.pos, max(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
 	end
@@ -1679,24 +1749,24 @@ class "__Orbwalker"
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
 		local state = self:GetState(unit);
-		if state == STATE_WINDDOWN then
+		if state == LOCAL_STATE_WINDDOWN then
 			return true;
 		end
 		if unit.isMe then
-			if Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
-				if state == STATE_ATTACK then
+			if LocalGameTimer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+				if state == LOCAL_STATE_ATTACK then
 					return false;
 				end
 			end
 		end
-		if state == STATE_ATTACK then
+		if state == LOCAL_STATE_ATTACK then
 			return true;
 		end
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
-		if Game.Timer() - (self:GetEndTime(unit) + ExtraWindUpTime - self:GetWindDownTime(unit)) >= 0 then
+		if LocalGameTimer() - (self:GetEndTime(unit) + ExtraWindUpTime - self:GetWindDownTime(unit)) >= 0 then
 			return true;
 		end
 		return false;
@@ -1708,9 +1778,9 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			if Game.Timer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+			if LocalGameTimer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
 				local state = self:GetState(unit);
-				if state == STATE_WINDUP or state == STATE_WINDDOWN then
+				if state == LOCAL_STATE_WINDUP or state == LOCAL_STATE_WINDDOWN then
 					return false;
 				end
 			end
@@ -1720,10 +1790,10 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanIssueOrder(unit)
 		unit = self:GetUnit(unit);
-		if self:GetState(unit) == STATE_ATTACK then
+		if self:GetState(unit) == LOCAL_STATE_ATTACK then
 			return true;
 		end
-		return Game.Timer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 + Utilities:GetClickDelay() >= 0;
+		return LocalGameTimer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 + Utilities:GetClickDelay() >= 0;
 	end
 
 	function __Orbwalker:GetState(unit)
@@ -1925,7 +1995,7 @@ class "__Orbwalker"
 
 	function __Orbwalker:HasMode(mode)
 		if mode == ORBWALKER_MODE_NONE then
-			for _, value in pairs(self:GetModes()) do
+			for _, value in LocalPairs(self:GetModes()) do
 				if value then
 					return false;
 				end
@@ -1953,7 +2023,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CalculateLastHittableMinions()
-		local extraTime = 0;--TODO (not self:CanIssueOrder()) and max(0, self:GetEndTime() - Game.Timer()) or 0;
+		local extraTime = 0;--TODO (not self:CanIssueOrder()) and max(0, self:GetEndTime() - LocalGameTimer()) or 0;
 		local maxMissileTravelTime = self.MyHeroIsMelee and 0 or (Utilities:GetAutoAttackRange(myHero) / self:GetMissileSpeed());
 		local Minions = {};
 		for i = 1, #self.EnemyMinionsInRange do
@@ -1965,7 +2035,7 @@ class "__Orbwalker"
 			orbwalkerMinion.LaneClearTime = self:GetAnimationTime(myHero, minion) + windUpTime + maxMissileTravelTime;
 			Minions[minion.handle] = orbwalkerMinion;
 		end
-		for _, attacks in pairs(self.HealthPrediction.IncomingAttacks) do
+		for _, attacks in LocalPairs(self.HealthPrediction.IncomingAttacks) do
 			if #attacks > 0 then
 				for i = 1, #attacks do
 					local attack = attacks[i];
@@ -1981,7 +2051,7 @@ class "__Orbwalker"
 		local LastHitMinions = {};
 		local AlmostLastHitMinions = {};
 		local LaneClearMinions = {};
-		for _, minion in pairs(Minions) do
+		for _, minion in LocalPairs(Minions) do
 			if minion:IsUnkillable() then
 				Linq:Add(UnkillableMinions, minion);
 			elseif minion:IsLastHittable() then
@@ -1992,14 +2062,11 @@ class "__Orbwalker"
 				Linq:Add(LaneClearMinions, minion);
 			end
 		end
-		table.sort(UnkillableMinions, function(a, b)
+		LocalTableSort(UnkillableMinions, function(a, b)
 			return a.LastHitHealth < b.LastHitHealth;
 		end);
-		for i = 1, #UnkillableMinions do
-			Linq:Add(self.UnkillableMinions, UnkillableMinions[i].Minion);
-		end
 
-		table.sort(LastHitMinions, function(a, b)
+		LocalTableSort(LastHitMinions, function(a, b)
 			if a.Minion.maxHealth == b.Minion.maxHealth then
 				return a.LastHitHealth < b.LastHitHealth;
 			else
@@ -2007,10 +2074,15 @@ class "__Orbwalker"
 			end
 		end);
 		for i = 1, #LastHitMinions do
-			Linq:Add(self.LastHitMinions, LastHitMinions[i].Minion);
+			local minion = LastHitMinions[i].Minion;
+			if Utilities:IsInAutoAttackRange(myHero, minion) then
+				self.LastHitMinion = minion;
+				break;
+			end
 		end
 
-		table.sort(AlmostLastHitMinions, function(a, b)
+
+		LocalTableSort(AlmostLastHitMinions, function(a, b)
 			if a.Minion.maxHealth == b.Minion.maxHealth then
 				return a.LaneClearHealth < b.LaneClearHealth;
 			else
@@ -2018,39 +2090,24 @@ class "__Orbwalker"
 			end
 		end);
 		for i = 1, #AlmostLastHitMinions do
-			Linq:Add(self.AlmostLastHitMinions, AlmostLastHitMinions[i].Minion);
-		end
-
-		local PushPriority = self.Menu.Farming.PushPriority:Value();
-		table.sort(LaneClearMinions, function(a, b)
-			if PushPriority then
-				return a.LaneClearHealth < b.LaneClearHealth;
-			else
-				return a.LaneClearHealth > b.LaneClearHealth;
-			end
-		end);
-		for i = 1, #LaneClearMinions do
-			Linq:Add(self.LaneClearMinions, LaneClearMinions[i].Minion);
-		end
-
-		for i = 1, #self.LastHitMinions do
-			local minion = self.LastHitMinions[i];
-			if Utilities:IsInAutoAttackRange(myHero, minion) then
-				self.LastHitMinion = minion;
-				break;
-			end
-		end
-
-		for i = 1, #self.AlmostLastHitMinions do
-			local minion = self.AlmostLastHitMinions[i];
+			local minion = AlmostLastHitMinions[i].Minion;
 			if Utilities:IsInAutoAttackRange(myHero, minion) then
 				self.AlmostLastHitMinion = minion;
 				break;
 			end
 		end
 
-		for i = 1, #self.LaneClearMinions do
-			local minion = self.LaneClearMinions[i];
+		local PushPriority = self.Menu.Farming.PushPriority:Value();
+		LocalTableSort(LaneClearMinions, function(a, b)
+			if PushPriority then
+				return a.LaneClearHealth < b.LaneClearHealth;
+			else
+				return a.LaneClearHealth > b.LaneClearHealth;
+			end
+		end);
+
+		for i = 1, #LaneClearMinions do
+			local minion = LaneClearMinions[i].Minion;
 			if Utilities:IsInAutoAttackRange(myHero, minion) then
 				self.LaneClearMinion = minion;
 				break;
@@ -2058,12 +2115,12 @@ class "__Orbwalker"
 		end
 
 		if self.AlmostLastHitMinion ~= nil then
-			self.LastShouldWait = Game.Timer();
+			self.LastShouldWait = LocalGameTimer();
 		end
 	end
 
 	function __Orbwalker:ShouldWait()
-		return Game.Timer() - self.LastShouldWait <= 0.4 or self.AlmostLastHitMinion ~= nil;
+		return LocalGameTimer() - self.LastShouldWait <= 0.4 or self.AlmostLastHitMinion ~= nil;
 	end
 
 	function __Orbwalker:GetAutoAttackDamage(minion)
