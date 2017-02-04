@@ -519,238 +519,184 @@ class "__Linq"
 	end
 
 	function __Linq:Add(t, value)
-		if value then
-			t[#t + 1] = value;
-		end
+		t[#t + 1] = value;
 	end
 
 class "__ObjectManager"
 	function __ObjectManager:__init()
-		self.Minions = nil;
-		self.AllyMinions = nil;
-		self.EnemyMinions = nil;
-		self.OtherMinions = nil;
-		self.OtherEnemyMinions = nil;
-		self.OtherAllyMinions = nil;
-		self.Monsters = nil;
-		self.Heroes = nil;
-		self.AllyHeroes = nil;
-		self.EnemyHeroes = nil;
-		self.Turrets = nil;
-		self.AllyTurrets = nil;
-		self.EnemyTurrets = nil;
-		Callback.Add('Tick', function()
-			self:OnTick();
-		end);
-	end
 
-	function __ObjectManager:OnTick()
-		self.Minions = nil;
-		self.AllyMinions = nil;
-		self.EnemyMinions = nil;
-		self.OtherMinions = nil;
-		self.OtherEnemyMinions = nil;
-		self.OtherAllyMinions = nil;
-		self.Monsters = nil;
-		self.Heroes = nil;
-		self.AllyHeroes = nil;
-		self.EnemyHeroes = nil;
-		self.Turrets = nil;
-		self.AllyTurrets = nil;
-		self.EnemyTurrets = nil;
-	end
-
-	function __ObjectManager:UpdateMinions()
-		if self.Minions == nil or self.Monsters == nil or self.OtherMinions == nil then
-			self.Minions = {};
-			self.Monsters = {};
-			self.OtherMinions = {};
-			if Game.MinionCount() > 0 then
-				for i = 1, Game.MinionCount() do
-					local minion = Game.Minion(i);
-					if Utilities:IsValidTarget(minion) then
-						if Utilities:IsOtherMinion(minion) then
-							Linq:Add(self.OtherMinions, minion);
-						elseif Utilities:IsMonster(minion) then
-							Linq:Add(self.Monsters, minion);
-						else
-							Linq:Add(self.Minions, minion);
-						end
-					end
-				end
-			end
-			if Game.WardCount() > 0 then
-				for i = 1, Game.WardCount() do
-					local minion = Game.Ward(i);
-					if Utilities:IsValidTarget(minion) then
-						if Utilities:IsOtherMinion(minion) then
-							Linq:Add(self.OtherMinions, minion);
-						elseif Utilities:IsMonster(minion) then
-							Linq:Add(self.Monsters, minion);
-						else
-							Linq:Add(self.Minions, minion);
-						end
-					end
-				end
-			end
-		end
 	end
 
 	function __ObjectManager:GetMinions()
-		self:UpdateMinions();
-		return self.Minions;
+		local result = {};
+		if Game.MinionCount() > 0 then
+			for i = 1, Game.MinionCount() do
+				local minion = Game.Minion(i);
+				if Utilities:IsValidTarget(minion) then
+					if Utilities:IsOtherMinion(minion) then
+
+					elseif Utilities:IsMonster(minion) then
+
+					else
+						Linq:Add(result, minion);
+					end
+				end
+			end
+		end
+		return result;
 	end
 
 	function __ObjectManager:GetAllyMinions()
-		if self.AllyMinions == nil then
-			self.AllyMinions = {};
-			local t = self:GetMinions();
-			for i = 1, #t do
-				local minion = t[i];
-				if minion.isAlly then
-					Linq:Add(self.AllyMinions, minion);
-				end
+		local t = self:GetMinions();
+		local result = {};
+		for i = 1, #t do
+			local minion = t[i];
+			if minion.isAlly then
+				Linq:Add(result, minion);
 			end
 		end
-		return self.AllyMinions;
+		return result;
 	end
 
 	function __ObjectManager:GetEnemyMinions()
-		if self.EnemyMinions == nil then
-			self.EnemyMinions = {};
-			local t = self:GetMinions();
-			for i = 1, #t do
-				local minion = t[i];
-				if minion.isEnemy then
-					Linq:Add(self.EnemyMinions, minion);
-				end
+		local result = {};
+		local t = self:GetMinions();
+		for i = 1, #t do
+			local minion = t[i];
+			if minion.isEnemy then
+				Linq:Add(result, minion);
 			end
 		end
-		return self.EnemyMinions;
+		return result;
 	end
 
 	function __ObjectManager:GetOtherMinions()
-		self:UpdateMinions();
-		return self.OtherMinions;
+		local result = {};
+		if Game.WardCount() > 0 then
+			for i = 1, Game.WardCount() do
+				local minion = Game.Ward(i);
+				if Utilities:IsValidTarget(minion) then
+					if Utilities:IsOtherMinion(minion) then
+						Linq:Add(result, minion);
+					end
+				end
+			end
+		end
+		return result;
 	end
 
 	function __ObjectManager:GetOtherAllyMinions()
-		if self.OtherAllyMinions == nil then
-			self.OtherAllyMinions = {};
-			local t = self:GetOtherMinions();
-			for i = 1, #t do
-				local minion = t[i];
-				if minion.isAlly then
-					Linq:Add(self.OtherAllyMinions, minion);
-				end
+		local result = {};
+		local t = self:GetOtherMinions();
+		for i = 1, #t do
+			local minion = t[i];
+			if minion.isAlly then
+				Linq:Add(result, minion);
 			end
 		end
-		return self.OtherAllyMinions;
+		return result;
 	end
 
 	function __ObjectManager:GetOtherEnemyMinions()
-		if self.OtherEnemyMinions == nil then
-			self.OtherEnemyMinions = {};
-			local t = self:GetOtherMinions();
-			for i = 1, #t do
-				local minion = t[i];
-				if minion.isEnemy then
-					Linq:Add(self.OtherEnemyMinions, minion);
-				end
+		local result = {};
+		local t = self:GetOtherMinions();
+		for i = 1, #t do
+			local minion = t[i];
+			if minion.isEnemy then
+				Linq:Add(result, minion);
 			end
 		end
-		return self.OtherEnemyMinions;
+		return result;
 	end
 
 	function __ObjectManager:GetMonsters()
-		self:UpdateMinions();
-		return self.Monsters;
+		local result = {};
+		if Game.MinionCount() > 0 then
+			for i = 1, Game.MinionCount() do
+				local minion = Game.Minion(i);
+				if Utilities:IsValidTarget(minion) then
+					if Utilities:IsOtherMinion(minion) then
+
+					elseif Utilities:IsMonster(minion) then
+						Linq:Add(result, minion);
+					else
+					end
+				end
+			end
+		end
+		return result;
 	end
 
 	function __ObjectManager:GetHeroes()
-		if self.Heroes == nil then
-			self.Heroes = {};
-			if Game.HeroCount() > 0 then
-				for i = 1, Game.HeroCount() do
-					local hero = Game.Hero(i);
-					if Utilities:IsValidTarget(hero) then
-						Linq:Add(self.Heroes, hero);
-					end
-				end
+		local result = {};
+		for i = 1, Game.HeroCount() do
+			local hero = Game.Hero(i);
+			if Utilities:IsValidTarget(hero) then
+				Linq:Add(result, hero);
 			end
 		end
-		return self.Heroes;
+		return result;
 	end
 
 	function __ObjectManager:GetAllyHeroes()
-		if self.AllyHeroes == nil then
-			self.AllyHeroes = {};
-			local t = self:GetHeroes();
-			for i = 1, #t do
-				local hero = t[i];
-				if hero.isAlly then
-					Linq:Add(self.AllyHeroes, hero);
-				end
+		local result = {};
+		local t = self:GetHeroes();
+		for i = 1, #t do
+			local hero = t[i];
+			if hero.isAlly then
+				Linq:Add(result, hero);
 			end
 		end
-		return self.AllyHeroes;
+		return result;
 	end
 
 	function __ObjectManager:GetEnemyHeroes()
-		if self.EnemyHeroes == nil then
-			self.EnemyHeroes = {};
-			local t = self:GetHeroes();
-			for i = 1, #t do
-				local hero = t[i];
-				if hero.isEnemy then
-					Linq:Add(self.EnemyHeroes, hero);
-				end
+		local result = {};
+		local t = self:GetHeroes();
+		for i = 1, #t do
+			local hero = t[i];
+			if hero.isEnemy then
+				Linq:Add(result, hero);
 			end
 		end
-		return self.EnemyHeroes;
+		return result;
 	end
 
 	function __ObjectManager:GetTurrets()
-		if self.Turrets == nil then
-			self.Turrets = {};
-			if Game.TurretCount() > 0 then
-				for i = 1, Game.TurretCount() do
-					local turret = Game.Turret(i);
-					if Utilities:IsValidTarget(turret) then
-						Linq:Add(self.Turrets, turret);
-					end
+		local result = {};
+		if Game.TurretCount() > 0 then
+			for i = 1, Game.TurretCount() do
+				local turret = Game.Turret(i);
+				if Utilities:IsValidTarget(turret) then
+					Linq:Add(result, turret);
 				end
 			end
 		end
-		return self.Turrets;
+		return result;
 	end
 
 	function __ObjectManager:GetAllyTurrets()
-		if self.AllyTurrets == nil then
-			self.AllyTurrets = {};
-			local t = self:GetTurrets();
-			for i = 1, #t do
-				local turret = t[i];
-				if turret.isAlly then
-					Linq:Add(self.AllyTurrets, turret);
-				end
+		local result = {};
+		local t = self:GetTurrets();
+		for i = 1, #t do
+			local turret = t[i];
+			if turret.isAlly then
+				Linq:Add(result, turret);
 			end
 		end
-		return self.AllyTurrets;
+		return result;
 	end
 
 	function __ObjectManager:GetEnemyTurrets()
-		if self.EnemyTurrets == nil then
-			self.EnemyTurrets = {};
-			local t = self:GetTurrets();
-			for i = 1, #t do
-				local turret = t[i];
-				if turret.isEnemy then
-					Linq:Add(self.EnemyTurrets, turret);
-				end
+		local result = {};
+		local t = self:GetTurrets();
+		for i = 1, #t do
+			local turret = t[i];
+			if turret.isEnemy then
+				Linq:Add(result, turret);
 			end
 		end
-		return self.EnemyTurrets;
+		return result;
 	end
 
 class "__HealthPrediction"
@@ -1339,7 +1285,6 @@ class "__Orbwalker"
 
 		self.DamageOnMinions = {};
 		self.EnemyMinionsInRange = {};
-		self.MonstersInRange = {};
 		self.UnkillableMinions = {};
 		self.LastHitMinions = {};
 		self.LastHitMinion = nil;
@@ -1466,8 +1411,12 @@ class "__Orbwalker"
 				return TargetSelector:GetTarget(targets, DAMAGE_TYPE_PHYSICAL);
 			end,
 			[ORBWALKER_TARGET_TYPE_MONSTER] = function()
-				for i = 1, #self.MonstersInRange do
-					return self.MonstersInRange[i];
+				local t = ObjectManager:GetMonsters();
+				for i = 1, #t do
+					local minion = t[i];
+					if Utilities:IsInAutoAttackRange(myHero, minion) then
+						return minion;
+					end
 				end
 				return nil;
 			end,
@@ -1570,7 +1519,6 @@ class "__Orbwalker"
 	function __Orbwalker:Clear()
 		self.DamageOnMinions = {};
 		self.EnemyMinionsInRange = {};
-		self.MonstersInRange = {};
 		self.UnkillableMinions = {};
 		self.LastHitMinions = {};
 		self.LastHitMinion = nil;
@@ -1591,7 +1539,6 @@ class "__Orbwalker"
 		self.MyHeroCanAttack = self:CanAttack();
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
-			self.EnemyMinionsInRange = {};
 			local t = ObjectManager:GetEnemyMinions();
 			for i = 1, #t do
 				local minion = t[i];
@@ -1605,14 +1552,6 @@ class "__Orbwalker"
 			end
 		end
 		if (not self.IsNone) then
-			self.MonstersInRange = {};
-			local t = ObjectManager:GetMonsters();
-			for i = 1, #t do
-				local minion = t[i];
-				if Utilities:IsInAutoAttackRange(myHero, minion) then
-					Linq:Add(self.MonstersInRange, minion);
-				end
-			end
 			self:Orbwalk();
 		end
 	end
@@ -1873,9 +1812,10 @@ class "__Orbwalker"
 		local potentialTargets = {};
 
 		local hero = nil;
-
+		local heroChecked = false;
 		if self.Modes[ORBWALKER_MODE_COMBO] or self.Modes[ORBWALKER_MODE_HARASS] then
 			hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
+			heroChecked = true;
 		end
 
 		local minion = nil;
@@ -1909,8 +1849,9 @@ class "__Orbwalker"
 					Linq:Add(potentialTargets, structure);
 				end
 			else
-				if hero == nil then
+				if not heroChecked then
 					hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
+					heroChecked = true;
 				end
 				if not LastHitPriority then
 					Linq:Add(potentialTargets, hero);
@@ -1940,8 +1881,9 @@ class "__Orbwalker"
 					Linq:Add(potentialTargets, structure);
 				end
 			else
-				if hero == nil then
+				if not heroChecked then
 					hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
+					heroChecked = true;
 				end
 				if not LastHitPriority and LaneClearHeroes then
 					Linq:Add(potentialTargets, hero);
