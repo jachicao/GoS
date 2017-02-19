@@ -614,6 +614,15 @@ class "__Utilities"
 		return self.CachedValidTargets[target.networkID];
 	end
 
+	function __Utilities:IsValidMissile(missile)
+		if missile == nil then
+			return false;
+		end
+		if missile.dead then
+			return false;
+		end
+		return true;
+	end
 
 	function __Utilities:HasUndyingBuff(target)
 		return false; --TODO
@@ -951,11 +960,15 @@ class "__IncomingAttack"
 		return self.AutoAttackDamage;
 	end
 
+	function __IncomingAttack:GetArrivalTime(target)
+		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + 0.25;
+	end
+
 	function __IncomingAttack:GetMissileTime(target)
 		if self.SourceIsMelee then
 			return 0;
 		end
-		return Utilities:GetDistance(self.SourcePosition, target) / self.MissileSpeed;
+		return ((Utilities:GetDistance(self.SourcePosition, target)) / self.MissileSpeed);
 	end
 
 	function __IncomingAttack:EqualsTarget(target)
@@ -970,8 +983,8 @@ class "__IncomingAttack"
 		local damage = 0;
 		if not self:ShouldRemove() then
 			delay = delay + Utilities:GetLatency() - 0.01;
-			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - LocalGameTimer();
-			if timeTillHit <= -0.25 then
+			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
+			if timeTillHit < 0 then
 				self.Arrived = true;
 			end
 			if not self.Arrived then
@@ -1478,6 +1491,12 @@ class "__Orbwalker"
 		self.HoldKey = false;
 		self.HoldPosition = nil;
 
+
+
+		self.LastMinionHealth = {};
+		self.LastMinionDraw = {};
+
+
 		self.ExtraWindUpTimes = {
 			["Jinx"] = 0.15,
 			["Rengar"] = 0.15,
@@ -1685,9 +1704,9 @@ class "__Orbwalker"
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
+		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		self.MyHeroCanMove = self:CanMove();
 		self.MyHeroCanAttack = self:CanAttack();
-		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
 			self.OnlyLastHit = (not self.Modes[ORBWALKER_MODE_LANECLEAR]);
 			if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
@@ -1816,22 +1835,45 @@ class "__Orbwalker"
 			end
 		end
 		--[[
+		local tempLastMinionHealth = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
-		local Minions = {};
 		for i = 1, #EnemyMinionsInRange do
 			local minion = EnemyMinionsInRange[i];
 			if Utilities:IsInRange(myHero, minion, 1500) then
-				Minions[minion.handle] = minion;
+				local health = minion.health;
+				if self.LastMinionHealth[minion.networkID] ~= nil and self.LastMinionHealth[minion.networkID] > health then
+					local time = LocalGameTimer() + 0.25;
+					if self.LastMinionDraw[time] == nil then
+						self.LastMinionDraw[time] = {};
+					end
+					Linq:Add(self.LastMinionDraw[time], { Text = "Lost " .. abs(self.LastMinionHealth[minion.networkID] - health), Position = minion.pos:To2D() });
+					local counter = 1;
+					for _, attacks in pairs(self.HealthPrediction.IncomingAttacks) do
+						if #attacks > 0 then
+							for i = 1, #attacks do
+								local attack = attacks[i];
+								if attack.TargetHandle == minion.handle then
+									local timeTillHit = attack:GetArrivalTime(minion) - LocalGameTimer();
+									if timeTillHit <= 0.25 and timeTillHit > -0.5 then
+										local position = minion.pos:To2D();
+										position.y = position.y + 18 * counter;
+										Linq:Add(self.LastMinionDraw[time], { Text = "Attack " .. timeTillHit, Position = position });
+										counter = counter + 1;
+									end
+								end
+							end
+						end
+					end
+				end
+				tempLastMinionHealth[minion.networkID] = health;
 			end
 		end
-		for _, attacks in pairs(self.HealthPrediction.IncomingAttacks) do
-			if #attacks > 0 then
-				for i = 1, #attacks do
-					local attack = attacks[i];
-					local minion = Minions[attack.TargetHandle];
-					if minion ~= nil then
-						attack:Draw(minion);
-					end
+		self.LastMinionHealth = tempLastMinionHealth;
+		for key, tab in pairs(self.LastMinionDraw) do
+			if LocalGameTimer() < key then
+				for i = 1, #tab do
+					local value = tab[i];
+					LocalDrawText(value.Text, value.Position);
 				end
 			end
 		end
@@ -1841,13 +1883,9 @@ class "__Orbwalker"
 	function __Orbwalker:GetUnit(unit)
 		return (unit ~= nil) and unit or myHero;
 	end
-
+	
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
-		local state = self:GetState(unit);
-		if state == STATE_WINDDOWN then
-			return true;
-		end
 		if unit.isMe then
 			if LocalGameTimer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
 				if state == STATE_ATTACK then
@@ -1855,6 +1893,12 @@ class "__Orbwalker"
 				end
 			end
 		end
+		local state = self:GetState(unit);
+		--[[
+			if state == STATE_WINDDOWN then
+				return true;
+			end
+		]]
 		if state == STATE_ATTACK then
 			return true;
 		end
