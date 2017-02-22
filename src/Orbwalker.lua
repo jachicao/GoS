@@ -217,6 +217,17 @@ class "__ItemManager"
 		return self:GetItemByID(unit, id) ~= nil;
 	end
 
+	function __ItemManager:GetItemSlot(unit, id)
+		for i = 1, #self.ItemSlots do
+			local slot = self.ItemSlots[i];
+			local item = unit:GetItemData(slot);
+			if item ~= nil and item.itemID > 0 then
+				return slot;
+			end
+		end
+		return nil;
+	end
+
 class "__Damage"
 	function __Damage:__init()
 		self.StaticPassives = {
@@ -457,6 +468,22 @@ class "__Utilities"
 		};
 		self.CachedValidTargets = {};
 
+		self.SlotToHotKeys = {
+			[_Q]			= function() return HK_Q end,
+			[_W]			= function() return HK_W end,
+			[_E]			= function() return HK_E end,
+			[_R]			= function() return HK_R end,
+			[ITEM_1]		= function() return HK_ITEM_1 end,
+			[ITEM_2]		= function() return HK_ITEM_2 end,
+			[ITEM_3]		= function() return HK_ITEM_3 end,
+			[ITEM_4]		= function() return HK_ITEM_4 end,
+			[ITEM_5]		= function() return HK_ITEM_5 end,
+			[ITEM_6]		= function() return HK_ITEM_6 end,
+			[ITEM_7]		= function() return HK_ITEM_7 end,
+			[SUMMONER_1]	= function() return HK_SUMMONER_1 end,
+			[SUMMONER_2]	= function() return HK_SUMMONER_2 end,
+		};
+
 		self.MenuIsOpen = false;
 
 		LocalCallbackAdd('Tick', function()
@@ -632,6 +659,13 @@ class "__Utilities"
 		return 0.03;
 	end
 
+	function __Utilities:GetHotKeyFromSlot(slot)
+		if self.SlotToHotKeys[slot] ~= nil then
+			return self.SlotToHotKeys[slot]();
+		end
+		return nil;
+	end
+
 class "__Linq"
 	function __Linq:__init()
 
@@ -640,6 +674,10 @@ class "__Linq"
 	function __Linq:Add(t, value)
 		t[#t + 1] = value;
 	end
+
+local MINION_TYPE_OTHER_MINION = 1;
+local MINION_TYPE_MONSTER = 2;
+local MINION_TYPE_LANE_MINION = 3;
 
 class "__ObjectManager"
 	function __ObjectManager:__init()
@@ -665,16 +703,22 @@ class "__ObjectManager"
 		end
 	end
 
+	function __ObjectManager:GetMinionType(minion)
+		if Utilities:IsOtherMinion(minion) then
+			return MINION_TYPE_OTHER_MINION;
+		elseif Utilities:IsMonster(minion) then
+			return MINION_TYPE_MONSTER;
+		else
+			return MINION_TYPE_LANE_MINION;
+		end
+	end
+
 	function __ObjectManager:GetMinions()
 		local result = {};
 		for i = 1, LocalGameMinionCount() do
 			local minion = LocalGameMinion(i);
 			if Utilities:IsValidTarget(minion) then
-				if Utilities:IsOtherMinion(minion) then
-
-				elseif Utilities:IsMonster(minion) then
-
-				else
+				if self:GetMinionType(minion) == MINION_TYPE_LANE_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -687,11 +731,7 @@ class "__ObjectManager"
 		for i = 1, LocalGameMinionCount() do
 			local minion = LocalGameMinion(i);
 			if Utilities:IsValidTarget(minion) and minion.isAlly then
-				if Utilities:IsOtherMinion(minion) then
-
-				elseif Utilities:IsMonster(minion) then
-
-				else
+				if self:GetMinionType(minion) == MINION_TYPE_LANE_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -704,11 +744,7 @@ class "__ObjectManager"
 		for i = 1, LocalGameMinionCount() do
 			local minion = LocalGameMinion(i);
 			if Utilities:IsValidTarget(minion) and minion.isEnemy then
-				if Utilities:IsOtherMinion(minion) then
-
-				elseif Utilities:IsMonster(minion) then
-
-				else
+				if self:GetMinionType(minion) == MINION_TYPE_LANE_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -721,7 +757,7 @@ class "__ObjectManager"
 		for i = 1, LocalGameWardCount() do
 			local minion = LocalGameWard(i);
 			if Utilities:IsValidTarget(minion) then
-				if Utilities:IsOtherMinion(minion) then
+				if self:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -734,7 +770,7 @@ class "__ObjectManager"
 		for i = 1, LocalGameWardCount() do
 			local minion = LocalGameWard(i);
 			if Utilities:IsValidTarget(minion) and minion.isAlly then
-				if Utilities:IsOtherMinion(minion) then
+				if self:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -747,7 +783,7 @@ class "__ObjectManager"
 		for i = 1, LocalGameWardCount() do
 			local minion = LocalGameWard(i);
 			if Utilities:IsValidTarget(minion) and minion.isEnemy then
-				if Utilities:IsOtherMinion(minion) then
+				if self:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
 					Linq:Add(result, minion);
 				end
 			end
@@ -760,11 +796,8 @@ class "__ObjectManager"
 		for i = 1, LocalGameMinionCount() do
 			local minion = LocalGameMinion(i);
 			if Utilities:IsValidTarget(minion) then
-				if Utilities:IsOtherMinion(minion) then
-
-				elseif Utilities:IsMonster(minion) then
+				if self:GetMinionType(minion) == MINION_TYPE_MONSTER then
 					Linq:Add(result, minion);
-				else
 				end
 			end
 		end
@@ -1522,7 +1555,7 @@ class "__Orbwalker"
 			end,
 		};
 		self.SpecialWindUpTimes = {
-		["TwistedFate"] = function(unit, target)
+			["TwistedFate"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "BlueCardPreAttack") or BuffManager:HasBuff(unit, "RedCardPreAttack") or BuffManager:HasBuff(unit, "GoldCardPreAttack") then
 					return 0.13;
 				end
