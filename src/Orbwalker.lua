@@ -1015,7 +1015,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() - 0.01;
+			delay = delay + Utilities:GetLatency() - 0.0125;
 			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
 			if timeTillHit < 0 then
 				self.Arrived = true;
@@ -1498,6 +1498,14 @@ class "__Orbwalker"
 		self.IsNone = false;
 		self.OnlyLastHit = false;
 
+		self.MyHeroState = STATE_ATTACK;
+		self.MyHeroIsMelee = true;
+		self.MyHeroCanMove = true;
+		self.MyHeroCanAttack = true;
+
+
+		self.FastKiting = false;
+
 		self.MenuKeys = {
 			[ORBWALKER_MODE_COMBO] = {},
 			[ORBWALKER_MODE_HARASS] = {},
@@ -1523,7 +1531,6 @@ class "__Orbwalker"
 		self.LastHoldKey = 0;
 		self.HoldKey = false;
 		self.HoldPosition = nil;
-
 
 
 		self.LastMinionHealth = {};
@@ -1737,6 +1744,11 @@ class "__Orbwalker"
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
+		local state = self:GetState();
+		if state == STATE_WINDUP and self.MyHeroState ~= STATE_WINDUP then
+			self.FastKiting = true;
+		end
+		self.MyHeroState = state;
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		self.MyHeroCanMove = self:CanMove();
 		self.MyHeroCanAttack = self:CanAttack();
@@ -1768,11 +1780,14 @@ class "__Orbwalker"
 				if args.Process and args.Target ~= nil then
 					self.LastAutoAttackSent = LocalGameTimer();
 					LocalControlAttack(args.Target);
-					self.HoldKey = false;
 					self.HoldPosition = nil;
 					return;
 				end
 			end
+		end
+		--Delay for cursor to come back
+		if LocalGameTimer() - self.LastAutoAttackSent <= 0.18 then
+			return;
 		end
 		self:Move();
 	end
@@ -1785,12 +1800,16 @@ class "__Orbwalker"
 		if not self.MyHeroCanMove then
 			return;
 		end
-		local MovementDelay = self.Menu.General.MovementDelay:Value() * 0.001;
-		if LocalGameTimer() - self.LastMovementSent <= MovementDelay then
-			return;
-		end
-		if (not self.Menu.General.FastKiting:Value()) and LocalGameTimer() - self.LastAutoAttackSent <= MovementDelay then
-			return;
+		if LocalGameTimer() - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
+			if self.Menu.General.FastKiting:Value() then
+				if self.FastKiting then
+					self.FastKiting = false;
+				else
+					return;
+				end
+			else
+				return;
+			end
 		end
 		local position = self:GetMovementPosition();
 		local movePosition = Utilities:IsInRange(myHero, position, 100) and myHero.pos:Extend(position, 100) or position;
@@ -1798,11 +1817,10 @@ class "__Orbwalker"
 		local move = false;
 		local hold = false;
 		if HoldRadius > 0 then
-			if Utilities:GetDistanceSquared(myHero, position) > HoldRadius * HoldRadius then
-				move = true;
-			else
+			if Utilities:IsInRange(myHero, position, HoldRadius) then
 				hold = true;
-				--Hold
+			else
+				move = true;
 			end
 		else
 			move = true;
@@ -1830,17 +1848,6 @@ class "__Orbwalker"
 				LocalControlKeyUp(72);
 				self.HoldPosition = myHero.pos;
 			end
-			--[[
-				if not self.HoldKey then
-					LocalControlKeyDown(72);
-					self.HoldKey = true;
-					self.LastHoldKey = LocalGameTimer();
-				else
-					if self.LastHoldKey > 0 and LocalGameTimer() - self.LastHoldKey > 0.15 then
-						self.LastHoldKey = 0;
-					end
-				end
-			]]
 		end
 	end
 
@@ -1966,7 +1973,7 @@ class "__Orbwalker"
 		if self:GetState(unit) == STATE_ATTACK then
 			return true;
 		end
-		return LocalGameTimer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 + Utilities:GetClickDelay() >= 0;
+		return LocalGameTimer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 >= 0;
 	end
 
 	function __Orbwalker:GetState(unit)
