@@ -3,35 +3,34 @@ if _G.SDK then
 end
 
 --[[
-	API:
+    API:
 
-	_G.SDK.DAMAGE_TYPE_PHYSICAL
-	_G.SDK.DAMAGE_TYPE_MAGICAL
-	_G.SDK.DAMAGE_TYPE_TRUE
-	_G.SDK.ORBWALKER_MODE_NONE
-	_G.SDK.ORBWALKER_MODE_COMBO
-	_G.SDK.ORBWALKER_MODE_HARASS
-	_G.SDK.ORBWALKER_MODE_LANECLEAR
-	_G.SDK.ORBWALKER_MODE_JUNGLECLEAR
-	_G.SDK.ORBWALKER_MODE_LASTHIT
-	_G.SDK.ORBWALKER_MODE_FLEE
+    _G.SDK.DAMAGE_TYPE_PHYSICAL
+    _G.SDK.DAMAGE_TYPE_MAGICAL
+    _G.SDK.DAMAGE_TYPE_TRUE
+    _G.SDK.ORBWALKER_MODE_NONE
+    _G.SDK.ORBWALKER_MODE_COMBO
+    _G.SDK.ORBWALKER_MODE_HARASS
+    _G.SDK.ORBWALKER_MODE_LANECLEAR
+    _G.SDK.ORBWALKER_MODE_JUNGLECLEAR
+    _G.SDK.ORBWALKER_MODE_LASTHIT
+    _G.SDK.ORBWALKER_MODE_FLEE
 
-	_G.SDK.Orbwalker
-		.ForceTarget -- GameObject
-		.ForceMovement -- Vector
-		.Modes[mode] -- if _G.SDK.Orbwalker.Modes[_G.SDK.ORBWALKER_MODE_COMBO] then DoCombo() end
-		:RegisterMenuKey(mode, key) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo)
-		:CanMove(unit or myHero)
-		:CanAttack(unit or myHero)
-		:GetTarget()
-		:ShouldWait()
-		:OnPreAttack(function({ Process, Target }) end)
-		:OnPreMovement(function({ Process, Target }) end)
+    _G.SDK.Orbwalker
+        .ForceTarget -- unit
+        .ForceMovement -- Vector
+        .Modes[mode: enum] -- if _G.SDK.Orbwalker.Modes[_G.SDK.ORBWALKER_MODE_COMBO] then DoCombo() end
+        :CanMove(unit or myHero) -- returns a boolean
+        :CanAttack(unit or myHero) -- returns a boolean
+        :GetTarget() -- returns a unit
+        :ShouldWait() -- returns a boolean
+        :OnPreAttack(function({ Process: boolean, Target: unit }) end) -- Suscribe to event
+        :OnPreMovement(function({ Process: boolean, Target: Vector }) end) -- Suscribe to event
+        :RegisterMenuKey(mode: enum, key: menu) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo); Only needed for extra keys
 
-	_G.SDK.TargetSelector
-		:GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
-		:GetTarget(range: number, damageType: enum, from: Vector) -- returns a unit or nil
-		
+    _G.SDK.TargetSelector
+        :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
+        :GetTarget(range: number, damageType: enum, from: Vector) -- returns a unit or nil
 ]]
 
 _G.SDK = {
@@ -45,6 +44,14 @@ _G.SDK = {
 	ORBWALKER_MODE_JUNGLECLEAR		= 3,
 	ORBWALKER_MODE_LASTHIT			= 4,
 	ORBWALKER_MODE_FLEE				= 5,
+	Linq 							= nil,
+	ObjectManager 					= nil,
+	Utilities 						= nil,
+	BuffManager 					= nil,
+	ItemManager 					= nil,
+	Damage 							= nil,
+	TargetSelector 					= nil,
+	Orbwalker 						= nil,
 };
 
 local LocalCallbackAdd				= Callback.Add;
@@ -119,6 +126,7 @@ local tonumber						= tonumber;
 local ipairs						= ipairs;
 local pairs							= pairs;
 
+local LocalMathCeil					= math.ceil;
 local LocalMathMax					= math.max;
 local LocalMathMin					= math.min;
 local LocalMathSqrt					= math.sqrt;
@@ -159,6 +167,7 @@ local TargetSelector = nil;
 local Orbwalker = nil;
 
 local myHero = nil;
+local EnemiesInGame = {};
 
 local LoadCallbacks = {};
 _G.AddLoadCallback = function(cb)
@@ -170,6 +179,9 @@ LocalCallbackAdd('Load', function()
 	local id = LocalCallbackAdd('Tick', function()
 		if not Loaded then
 			if LocalGameHeroCount() > 1 or LocalGameTimer() > 30 then
+				for i = 1, LocalGameHeroCount() do
+					EnemiesInGame[LocalGameHero(i).charName] = true;
+				end
 				myHero = _G.myHero;
 				for i = 1, #LoadCallbacks do
 					LoadCallbacks[i]();
@@ -280,16 +292,25 @@ class "__ItemManager"
 		return nil;
 	end
 
-
-
-
-
 class "__Damage"
 	function __Damage:__init()
 		self.StaticChampionDamageDatabase = {
+			["Caitlyn"] = function(args)
+				if BuffManager:HasBuff(args.From, "caitlynheadshot") then
+					if args.TargetIsMinion then
+						args.RawPhysical = args.RawPhysical + args.From.totalDamage * 1.5;
+					else
+						--TODO
+					end
+				end
+			end,
 			["Corki"] = function(args)
 				args.RawTotal = args.RawTotal * 0.5;
 				args.RawMagical = args.RawTotal;
+			end,
+			["Diana"] = function(args)
+				local level = Utilities:GetLevel(args.From);
+				args.RawMagical = args.RawMagical + LocalMathMax(15 + 5 * level, -10 + 10 * level, -60 + 15 * level, -125 + 20 * level, -200 + 25 * level) + 0.8 * args.From.ap;
 			end,
 			["Graves"] = function(args)
 				local t = { 70, 71, 72, 74, 75, 76, 78, 80, 81, 83, 85, 87, 89, 91, 95, 96, 97, 100 };
@@ -297,16 +318,70 @@ class "__Damage"
 			end,
 			["Jinx"] = function(args)
 				if BuffManager:HasBuff(args.From, "JinxQ") then
-					args.RawTotal = args.RawTotal * 1.1;
+					args.RawPhysical = args.RawPhysical + args.From.totalDamage * 0.1;
 				end
 			end,
 			["Kalista"] = function(args)
-				args.RawTotal = args.RawTotal * 0.9;
+				args.RawPhysical = args.RawPhysical - args.From.totalDamage * 0.1;
+			end,
+			["Nasus"] = function(args)
+				if BuffManager:HasBuff(args.From, "NasusQ") then
+					args.RawPhysical = args.RawPhysical + LocalMathMax(BuffManager:GetBuffCount(args.From, "nasusqstacks"), 0) + 10 + 20 * Utilities:GetSpellLevel(args.From, _Q);
+				end
+			end,
+			["Thresh"] = function(args)
+				local level = Utilities:GetSpellLevel(args.From, _E);
+				if level > 0 then
+					local damage = LocalMathMax(BuffManager:GetBuffCount(args.From, "threshpassivesouls"), 0) + (0.5 + 0.3 * level) * args.From.totalDamage;
+					if BuffManager:HasBuff(args.From, "threshqpassive4") then
+						damage = damage * 1;
+					elseif BuffManager:HasBuff(args.From, "threshqpassive3") then
+						damage = damage * 0.5;
+					elseif BuffManager:HasBuff(args.From, "threshqpassive2") then
+						damage = damage * 1/3;
+					else
+						damage = damage * 0.25;
+					end
+					args.RawMagical = args.RawMagical + damage;
+				end
+			end,
+			["TwistedFate"] = function(args)
+				if BuffManager:HasBuff(args.From, "CardMasterStackParticle") then
+					args.RawMagical = args.RawMagical + 30 + 25 * Utilities:GetSpellLevel(args.From, _E) + 0.5 * args.From.ap;
+				end
+				if BuffManager:HasBuff(args.From, "BlueCardPreAttack") then
+					args.DamageType = DAMAGE_TYPE_MAGICAL;
+					args.RawMagical = args.RawMagical + 20 + 20 * Utilities:GetSpellLevel(args.From, _W) + 0.5 * args.From.ap;
+				elseif BuffManager:HasBuff(args.From, "RedCardPreAttack") then
+					args.DamageType = DAMAGE_TYPE_MAGICAL;
+					args.RawMagical = args.RawMagical + 15 + 15 * Utilities:GetSpellLevel(args.From, _W) + 0.5 * args.From.ap;
+				elseif BuffManager:HasBuff(args.From, "GoldCardPreAttack") then
+					args.DamageType = DAMAGE_TYPE_MAGICAL;
+					args.RawMagical = args.RawMagical + 7.5 + 7.5 * Utilities:GetSpellLevel(args.From, _W) + 0.5 * args.From.ap;
+				end
+			end,
+			["Vayne"] = function(args)
+				if BuffManager:HasBuff(args.From, "vaynetumblebonus") then
+					args.RawPhysical = args.RawPhysical + (0.25 + 0.05 * Utilities:GetSpellLevel(args.From, _Q)) * args.From.totalDamage;
+				end
+			end,
+		};
+		self.VariableChampionDamageDatabase = {
+			["Vayne"] = function(args)
+				if BuffManager:GetBuffCount(args.Target, "vaynesilvereddebuff") == 2 then
+					local level = Utilities:GetSpellLevel(args.From, _W);
+					args.CalculatedTrue = args.CalculatedTrue + LocalMathMax((0.045 + 0.015 * level) * args.Target.maxHealth, 20 + 20 * level);
+				end
+			end,
+			["Zed"] = function(args)
+				if Utilities:GetHealthPercent(args.Target) <= 50 and not BuffManager:HasBuff("zedpassivecd") then
+					args.RawMagical = args.RawMagical + args.Target.maxHealth * (4 + 2 * LocalMathCeil(Utilities:GetLevel(args.From) / 6)) * 0.01;
+				end
 			end,
 		};
 		self.StaticItemDamageDatabase = {
 			[1043] = function(args)
-				args.RawTotal = args.RawTotal + 15;
+				args.RawPhysical = args.RawPhysical + 15;
 			end,
 			[2015] = function(args)
 				if BuffManager:GetBuffCount(args.From, "itemstatikshankcharge") == 100 then
@@ -324,7 +399,7 @@ class "__Damage"
 				end
 			end,
 			[3085] = function(args)
-				args.RawTotal = args.RawTotal + 15;
+				args.RawPhysical = args.RawPhysical + 15;
 			end,
 			[3087] = function(args)
 				if BuffManager:GetBuffCount(args.From, "itemstatikshankcharge") == 100 then
@@ -381,7 +456,7 @@ class "__Damage"
 	end
 
 	function __Damage:GetMaxLevel(hero)
-		return LocalMathMax(LocalMathMin(hero.levelData.lvl, 18), 1);
+		return LocalMathMax(LocalMathMin(Utilities:GetLevel(hero), 18), 1);
 	end
 
 	function __Damage:CalculateDamage(from, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
@@ -517,6 +592,10 @@ class "__Damage"
 		end
 		local CriticalStrike = false;
 
+		if self.VariableChampionDamageDatabase[args.Target.charName] ~= nil then
+			self.VariableChampionDamageDatabase[args.Target.charName](args);
+		end
+
 		if args.DamageType == DAMAGE_TYPE_PHYSICAL then
 			args.RawPhysical = args.RawPhysical + args.RawTotal;
 		elseif args.DamageType == DAMAGE_TYPE_MAGICAL then
@@ -643,6 +722,21 @@ class "__Utilities"
 			["Velkoz"] = function(target) return true end,
 			["Viktor"] = function(target) return BuffManager:HasBuff(target, "ViktorPowerTransferReturn") end,
 		};
+		self.UndyingBuffs = {
+			["Aatrox"] = function(target, addHealthCheck)
+				return BuffManager:HasBuff(target, "aatroxpassivedeath");
+			end,
+			["Fiora"] = function(target, addHealthCheck)
+				return BuffManager:HasBuff(target, "FioraW");
+			end,
+			["Tryndamere"] = function(target, addHealthCheck)
+				return BuffManager:HasBuff(target, "UndyingRage") and (not addHealthCheck or target.health <= 30);
+			end,
+			["Vladimir"] = function(target, addHealthCheck)
+				return BuffManager:HasBuff(target, "VladimirSanguinePool");
+			end,
+		};
+
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
 			self.SpecialMelees[charName] = function(target) return true end;
@@ -759,7 +853,7 @@ class "__Utilities"
 		return a.networkID == b.networkID;
 	end
 
-	function __Utilities:GetDistanceSquared(a, b, addY)
+	function __Utilities:GetDistanceSquared(a, b, includeY)
 		local aIsGameObject = a.pos ~= nil;
 		local bIsGameObject = b.pos ~= nil;
 		if aIsGameObject then
@@ -768,7 +862,7 @@ class "__Utilities"
 		if bIsGameObject then
 			b = b.pos;
 		end
-		if addY then
+		if includeY then
 			local x = (a.x - b.x);
 			local y = (a.y - b.y);
 			local z = (a.z - b.z);
@@ -781,19 +875,19 @@ class "__Utilities"
 		end
 	end
 
-	function __Utilities:GetDistance(a, b, addY)
+	function __Utilities:GetDistance(a, b, includeY)
 		return LocalMathSqrt(self:GetDistanceSquared(a, b));
 	end
 
-	function __Utilities:IsInRange(from, target, range, addY)
-		return self:GetDistanceSquared(from, target, addY) <= range * range;
+	function __Utilities:IsInRange(from, target, range, includeY)
+		return self:GetDistanceSquared(from, target, includeY) <= range * range;
 	end
 
-	function __Utilities:IsInAutoAttackRange(from, target, addY)
+	function __Utilities:IsInAutoAttackRange(from, target, includeY)
 		if from.charName == "Azir" then
-			--TODO
+			-- charName: "AzirSoldier", buffName: "azirwspawnsound", not valid
 		end
-		return self:IsInRange(from, target, self:GetAutoAttackRange(from, target, addY));
+		return self:IsInRange(from, target, self:GetAutoAttackRange(from, target, includeY));
 	end
 
 	function __Utilities:TotalShield(target)
@@ -816,6 +910,10 @@ class "__Utilities"
 
 	function __Utilities:GetLatency()
 		return LocalGameLatency() * 0.001;
+	end
+
+	function __Utilities:GetHealthPercent(unit)
+		return 100 * unit.health / unit.maxHealth;
 	end
 
 	function __Utilities:__IsValidTarget(target)
@@ -848,8 +946,22 @@ class "__Utilities"
 		return true;
 	end
 
-	function __Utilities:HasUndyingBuff(target)
-		return false; --TODO
+	function __Utilities:HasUndyingBuff(target, addHealthCheck)
+		if self.UndyingBuffs[target.charName] ~= nil then
+			if self.UndyingBuffs[target.charName](target, addHealthCheck) then
+				return true;
+			end
+		end
+		if self.EnemiesInGame["Kayle"] and BuffManager:HasBuff(target, "JudicatorIntervention") then
+			return true;
+		end
+		if self.EnemiesInGame["Kindred"] and BuffManager:HasBuff(target, "kindredrnodeathbuff") and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
+			return true;
+		end
+		if self.EnemiesInGame["Zilean"] and (BuffManager:HasBuff(target, "ChronoShift") or BuffManager:HasBuff(target, "chronorevive")) and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
+			return true;
+		end
+		return false;
 	end
 
 	function __Utilities:GetClickDelay()
@@ -869,6 +981,17 @@ class "__Utilities"
 		end
 		return false;
 	end
+
+	function __Utilities:GetSpellLevel(unit, slot)
+		return unit:GetSpellData(slot).level;
+	end
+
+
+
+	function __Utilities:GetLevel(unit)
+		return unit.levelData.lvl;
+	end
+
 
 class "__Linq"
 	function __Linq:__init()
@@ -908,10 +1031,10 @@ class "__ObjectManager"
 	end
 
 	function __ObjectManager:GetMinionType(minion)
-		if Utilities:IsOtherMinion(minion) then
-			return MINION_TYPE_OTHER_MINION;
-		elseif Utilities:IsMonster(minion) then
+		if Utilities:IsMonster(minion) then
 			return MINION_TYPE_MONSTER;
+		elseif Utilities:IsOtherMinion(minion) then
+			return MINION_TYPE_OTHER_MINION;
 		else
 			return MINION_TYPE_LANE_MINION;
 		end
@@ -1688,8 +1811,9 @@ local ORBWALKER_MODE_FLEE				= _G.SDK.ORBWALKER_MODE_FLEE;
 
 local ORBWALKER_TARGET_TYPE_HERO			= 0;
 local ORBWALKER_TARGET_TYPE_MONSTER			= 1;
-local ORBWALKER_TARGET_TYPE_MINION			= 2;
-local ORBWALKER_TARGET_TYPE_STRUCTURE		= 3;
+local ORBWALKER_TARGET_TYPE_LANE_MINION		= 2;
+local ORBWALKER_TARGET_TYPE_OTHER_MINION	= 3;
+local ORBWALKER_TARGET_TYPE_STRUCTURE		= 4;
 
 class "__Orbwalker"
 	function __Orbwalker:__init()
@@ -1859,6 +1983,9 @@ class "__Orbwalker"
 			end,
 			[ORBWALKER_TARGET_TYPE_MONSTER] = function()
 				local t = ObjectManager:GetMonsters();
+				LocalTableSort(t, function(a, b)
+					return a.maxHealth > b.maxHealth;
+				end);
 				for i = 1, #t do
 					local minion = t[i];
 					if Utilities:IsInAutoAttackRange(myHero, minion) then
@@ -1867,7 +1994,7 @@ class "__Orbwalker"
 				end
 				return nil;
 			end,
-			[ORBWALKER_TARGET_TYPE_MINION] = function()
+			[ORBWALKER_TARGET_TYPE_LANE_MINION] = function()
 				local SupportMode = false;
 				if self.Menu.General["SupportMode." .. myHero.charName]:Value() then
 					local t = ObjectManager:GetAllyHeroes();
@@ -1892,6 +2019,19 @@ class "__Orbwalker"
 					end
 					return (not SupportMode) and self.LaneClearMinion or nil;
 				end
+			end,
+			[ORBWALKER_TARGET_TYPE_OTHER_MINION] = function()
+				local t = ObjectManager:GetOtherEnemyMinions();
+				LocalTableSort(t, function(a, b)
+					return a.health < b.health;
+				end);
+				for i = 1, #t do
+					local minion = t[i];
+					if Utilities:IsInAutoAttackRange(myHero, minion) then
+						return minion;
+					end
+				end
+				return nil;
 			end,
 			[ORBWALKER_TARGET_TYPE_STRUCTURE] = function()
 				for i = 1, #self.EnemyStructures do
@@ -2019,7 +2159,7 @@ class "__Orbwalker"
 			end
 		end
 		--Delay for cursor to come back
-		if LocalGameTimer() - self.LastAutoAttackSent <= 0.18 then
+		if LocalGameTimer() - self.LastAutoAttackSent <= 0.2 then
 			return;
 		end
 		self:Move();
@@ -2313,9 +2453,16 @@ class "__Orbwalker"
 			heroChecked = true;
 		end
 
-		local minion = nil;
-		if self.Modes[ORBWALKER_MODE_HARASS] or self.Modes[ORBWALKER_MODE_LASTHIT] or self.Modes[ORBWALKER_MODE_LANECLEAR] then
-			minion = self:GetTargetByType(ORBWALKER_TARGET_TYPE_MINION);
+		local laneMinion = nil;
+		if self.Modes[ORBWALKER_MODE_HARASS] or self.Modes[ORBWALKER_MODE_LANECLEAR] or self.Modes[ORBWALKER_MODE_LASTHIT] then
+			laneMinion = self:GetTargetByType(ORBWALKER_TARGET_TYPE_LANE_MINION);
+		end
+
+		local otherMinion = nil;
+		local otherMinionIsLastHittable = false;
+		if self.Modes[ORBWALKER_MODE_LANECLEAR] or self.Modes[ORBWALKER_MODE_LASTHIT] or self.Modes[ORBWALKER_MODE_JUNGLECLEAR] then
+			otherMinion = self:GetTargetByType(ORBWALKER_TARGET_TYPE_OTHER_MINION);
+			otherMinionIsLastHittable = otherMinion ~= nil and otherMinion.health <= 1;
 		end
 
 		local monster = nil
@@ -2339,29 +2486,30 @@ class "__Orbwalker"
 				if not LastHitPriority then
 					Linq:Add(potentialTargets, structure);
 				end
-				Linq:Add(potentialTargets, minion);
+				Linq:Add(potentialTargets, laneMinion);
 				if LastHitPriority and not self:ShouldWait() then
 					Linq:Add(potentialTargets, structure);
 				end
+				Linq:Add(potentialTargets, laneMinion);
 			else
-				if not heroChecked then
-					hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
-					heroChecked = true;
-				end
 				if not LastHitPriority then
 					Linq:Add(potentialTargets, hero);
 				end
-				Linq:Add(potentialTargets, minion);
+				Linq:Add(potentialTargets, laneMinion);
 				if LastHitPriority and not self:ShouldWait() then
 					Linq:Add(potentialTargets, hero);
 				end
 			end
 		end
 		if self.Modes[ORBWALKER_MODE_LASTHIT] then
-			Linq:Add(potentialTargets, minion);
+			Linq:Add(potentialTargets, laneMinion);
+			if otherMinionIsLastHittable then
+				Linq:Add(potentialTargets, otherMinion);
+			end
 		end
 		if self.Modes[ORBWALKER_MODE_JUNGLECLEAR] then
 			Linq:Add(potentialTargets, monster);
+			Linq:Add(potentialTargets, otherMinion);
 		end
 		if self.Modes[ORBWALKER_MODE_LANECLEAR] then
 			local LaneClearHeroes = self.Menu.General.LaneClearHeroes:Value();
@@ -2369,8 +2517,11 @@ class "__Orbwalker"
 				if not LastHitPriority then
 					Linq:Add(potentialTargets, structure);
 				end
-				if Utilities:IdEquals(minion, self.LastHitMinion) then
-					Linq:Add(potentialTargets, minion);
+				if Utilities:IdEquals(laneMinion, self.LastHitMinion) then
+					Linq:Add(potentialTargets, laneMinion);
+				end
+				if otherMinionIsLastHittable then
+					Linq:Add(potentialTargets, otherMinion);
 				end
 				if LastHitPriority and not self:ShouldWait() then
 					Linq:Add(potentialTargets, structure);
@@ -2383,15 +2534,16 @@ class "__Orbwalker"
 				if not LastHitPriority and LaneClearHeroes then
 					Linq:Add(potentialTargets, hero);
 				end
-				if Utilities:IdEquals(minion, self.LastHitMinion) then
-					Linq:Add(potentialTargets, minion);
+				if Utilities:IdEquals(laneMinion, self.LastHitMinion) then
+					Linq:Add(potentialTargets, laneMinion);
 				end
 				if LastHitPriority and LaneClearHeroes and not self:ShouldWait() then
 					Linq:Add(potentialTargets, hero);
 				end
-				if Utilities:IdEquals(minion, self.LaneClearMinion) then
-					Linq:Add(potentialTargets, minion);
+				if Utilities:IdEquals(laneMinion, self.LaneClearMinion) then
+					Linq:Add(potentialTargets, laneMinion);
 				end
+				Linq:Add(potentialTargets, otherMinion);
 			end
 		end
 		for i = 1, #potentialTargets do
