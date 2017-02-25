@@ -952,13 +952,13 @@ class "__Utilities"
 				return true;
 			end
 		end
-		if self.EnemiesInGame["Kayle"] and BuffManager:HasBuff(target, "JudicatorIntervention") then
+		if EnemiesInGame["Kayle"] and BuffManager:HasBuff(target, "JudicatorIntervention") then
 			return true;
 		end
-		if self.EnemiesInGame["Kindred"] and BuffManager:HasBuff(target, "kindredrnodeathbuff") and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
+		if EnemiesInGame["Kindred"] and BuffManager:HasBuff(target, "kindredrnodeathbuff") and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
 			return true;
 		end
-		if self.EnemiesInGame["Zilean"] and (BuffManager:HasBuff(target, "ChronoShift") or BuffManager:HasBuff(target, "chronorevive")) and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
+		if EnemiesInGame["Zilean"] and (BuffManager:HasBuff(target, "ChronoShift") or BuffManager:HasBuff(target, "chronorevive")) and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
 			return true;
 		end
 		return false;
@@ -2767,13 +2767,6 @@ class "__OrbwalkerMinion"
 	end
 
 
--- Disabling GoS Orbwalker
-if _G.Orbwalker then
-	_G.Orbwalker.Enabled:Value(false);
-	_G.Orbwalker.Drawings.Enabled:Value(false);
-	_G.Orbwalker = nil;
-end
-
 -- Replicate EOW
 class "__EOW"
 	function __EOW:__init()
@@ -2811,12 +2804,6 @@ class "__EOW"
 		return Damage:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, rawDamage);
 	end
 
-AddLoadCallback(function()
-	if _G.EOW then
-		_G.EOW = __EOW();
-	end
-end);
-
 Linq = __Linq();
 ObjectManager = __ObjectManager();
 Utilities = __Utilities();
@@ -2834,3 +2821,15 @@ _G.SDK.ItemManager = ItemManager;
 _G.SDK.Damage = Damage;
 _G.SDK.TargetSelector = TargetSelector;
 _G.SDK.Orbwalker = Orbwalker;
+
+-- Disabling GoS Orbwalker
+if _G.Orbwalker then
+	_G.Orbwalker.Enabled:Value(false);
+	_G.Orbwalker.Drawings.Enabled:Value(false);
+end
+
+AddLoadCallback(function()
+	if _G.EOW then
+		_G.EOW = __EOW();
+	end
+end);
