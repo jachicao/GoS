@@ -1868,14 +1868,10 @@ class "__Orbwalker"
 		self.OnPreAttackCallbacks = {};
 		self.OnPreMovementCallbacks = {};
 
-		self.LastHoldKey = 0;
-		self.HoldKey = false;
 		self.HoldPosition = nil;
-
 
 		self.LastMinionHealth = {};
 		self.LastMinionDraw = {};
-
 
 		self.ExtraWindUpTimes = {
 			--["Jinx"] = 0.15,
@@ -2771,12 +2767,55 @@ class "__OrbwalkerMinion"
 	end
 
 
--- Disabling GoS orbwalker
+-- Disabling GoS Orbwalker
 if _G.Orbwalker then
 	_G.Orbwalker.Enabled:Value(false);
 	_G.Orbwalker.Drawings.Enabled:Value(false);
+	_G.Orbwalker = nil;
 end
 
+-- Replicate EOW
+class "__EOW"
+	function __EOW:__init()
+		_G.EOWMenu.Config.AE:Value(false);
+		_G.EOWMenu.Config.ME:Value(false);
+		_G.EOWMenu.Draw.DA:Value(true);
+	end
+
+	function __EOW:GetTarget()
+		return Orbwalker:GetTarget();
+	end
+
+	function __EOW:GetOrbTarget()
+		return Orbwalker:GetTarget();
+	end
+
+	function __EOW:Mode()
+		if Orbwalker.Modes[ORBWALKER_MODE_COMBO] then
+			return "Combo";
+		elseif Orbwalker.Modes[ORBWALKER_MODE_HARASS] then
+			return "Harass";
+		elseif Orbwalker.Modes[ORBWALKER_MODE_LANECLEAR] then
+			return "LaneClear";
+		elseif Orbwalker.Modes[ORBWALKER_MODE_LASTHIT] then
+			return "LastHit";
+		end
+		return "";
+	end
+
+	function __EOW:CalcPhysicalDamage(from, target, rawDamage)
+		return Damage:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, rawDamage);
+	end
+
+	function __EOW:CalcMagicalDamage(from, target, rawDamage)
+		return Damage:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, rawDamage);
+	end
+
+AddLoadCallback(function()
+	if _G.EOW then
+		_G.EOW = __EOW();
+	end
+end);
 
 Linq = __Linq();
 ObjectManager = __ObjectManager();
