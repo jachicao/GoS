@@ -85,9 +85,13 @@ local COLOR_WHITE					= LocalDrawColor(255, 255, 255, 255);
 local COLOR_BLACK					= LocalDrawColor(255, 0, 0, 0);
 local COLOR_RED						= LocalDrawColor(255, 255, 0, 0);
 
-local DAMAGE_TYPE_PHYSICAL	= 0;
-local DAMAGE_TYPE_MAGICAL	= 1;
-local DAMAGE_TYPE_TRUE		= 2;
+_G.DAMAGE_TYPE_PHYSICAL		= 0;
+_G.DAMAGE_TYPE_MAGICAL		= 1;
+_G.DAMAGE_TYPE_TRUE			= 2;
+
+local DAMAGE_TYPE_PHYSICAL	= _G.DAMAGE_TYPE_PHYSICAL;
+local DAMAGE_TYPE_MAGICAL	= _G.DAMAGE_TYPE_MAGICAL;
+local DAMAGE_TYPE_TRUE		= _G.DAMAGE_TYPE_TRUE;
 
 local TARGET_SELECTOR_MODE_AUTO							= 1;
 local TARGET_SELECTOR_MODE_MOST_STACK					= 2;
@@ -107,7 +111,9 @@ local ItemManager = nil;
 local Damage = nil;
 local ObjectManager = nil;
 local TargetSelector = nil;
-local OW = nil;
+local Orbwalker = nil;
+
+local myHero = nil;
 
 local LoadCallbacks = {};
 _G.AddLoadCallback = function(cb)
@@ -119,6 +125,7 @@ LocalCallbackAdd('Load', function()
 	local id = LocalCallbackAdd('Tick', function()
 		if not Loaded then
 			if LocalGameHeroCount() > 1 or LocalGameTimer() > 30 then
+				myHero = _G.myHero;
 				for i = 1, #LoadCallbacks do
 					LoadCallbacks[i]();
 				end
@@ -147,7 +154,7 @@ class "__BuffManager"
 			for i = 0, unit.buffCount do
 				local buff = unit:GetBuff(i);
 				if self:BuffIsValid(buff) then
-					t[buff.name] = buff.stacks;
+					t[buff.name] = buff.count;
 				end
 			end
 			self.CachedBuffStacks[unit.networkID] = t;
@@ -228,9 +235,13 @@ class "__ItemManager"
 		return nil;
 	end
 
+
+
+
+
 class "__Damage"
 	function __Damage:__init()
-		self.StaticPassives = {
+		self.StaticChampionDamageDatabase = {
 			["Corki"] = function(args)
 				args.RawTotal = args.RawTotal * 0.5;
 				args.RawMagical = args.RawTotal;
@@ -246,6 +257,62 @@ class "__Damage"
 			end,
 			["Kalista"] = function(args)
 				args.RawTotal = args.RawTotal * 0.9;
+			end,
+		};
+		self.StaticItemDamageDatabase = {
+			[1043] = function(args)
+				args.RawTotal = args.RawTotal + 15;
+			end,
+			[2015] = function(args)
+				if BuffManager:GetBuffCount(args.From, "itemstatikshankcharge") == 100 then
+					args.RawMagical = args.RawMagical + 40;
+				end
+			end,
+			[3057] = function(args)
+				if BuffManager:HasBuff(args.From, "sheen") then
+					args.RawPhysical = args.RawPhysical + 1 * args.From.baseDamage;
+				end
+			end,
+			[3078] = function(args)
+				if BuffManager:HasBuff(args.From, "sheen") then
+					args.RawPhysical = args.RawPhysical + 2 * args.From.baseDamage;
+				end
+			end,
+			[3085] = function(args)
+				args.RawTotal = args.RawTotal + 15;
+			end,
+			[3087] = function(args)
+				if BuffManager:GetBuffCount(args.From, "itemstatikshankcharge") == 100 then
+					local t = { 50, 50, 50, 50, 50, 56, 61, 67, 72, 77, 83, 88, 94, 99, 104, 110, 115, 120 };
+					args.RawMagical = args.RawMagical + (1 + (args.TargetIsMinion and 1.2 or 0)) * t[self:GetMaxLevel(args.From)];
+				end
+			end,
+			[3091] = function(args)
+				args.RawMagical = args.RawMagical + 40;
+			end,
+			[3094] = function(args)
+				if BuffManager:GetBuffCount(args.From, "itemstatikshankcharge") == 100 then
+					local t = { 50, 50, 50, 50, 50, 58, 66, 75, 83, 92, 100, 109, 117, 126, 134, 143, 151, 160 };
+					args.RawMagical = args.RawMagical + t[self:GetMaxLevel(args.From)];
+				end
+			end,
+			[3100] = function(args)
+				if BuffManager:HasBuff(args.From, "lichbane") then
+					args.RawMagical = args.RawMagical + 0.75 * args.From.baseDamage + 0.5 * args.From.ap;
+				end
+			end,
+			[3115] = function(args)
+				args.RawMagical = args.RawMagical + 15 + 0.15 * args.From.ap;
+			end,
+			[3124] = function(args)
+				args.CalculatedMagical = args.CalculatedMagical + 15;
+			end,
+		};
+		self.VariableItemDamageDatabase = {
+			[1041] = function(args)
+				if Utilities:IsMonster(args.Target) then
+					args.CalculatedPhysical = args.CalculatedPhysical + 25;
+				end
 			end,
 		};
 		self.TurretToMinionPercentMod = {};
@@ -269,7 +336,7 @@ class "__Damage"
 	end
 
 	function __Damage:GetMaxLevel(hero)
-		return min(hero.levelData.lvl, 18);
+		return max(min(hero.levelData.lvl, 18), 1);
 	end
 
 	function __Damage:CalculateDamage(from, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
@@ -366,43 +433,63 @@ class "__Damage"
 			DamageType = DAMAGE_TYPE_PHYSICAL,
 			TargetIsMinion = targetIsMinion,
 		};
-		if self.StaticPassives[from.charName] ~= nil then
-			self.StaticPassives[from.charName](args);
+		if self.StaticChampionDamageDatabase[from.charName] ~= nil then
+			self.StaticChampionDamageDatabase[from.charName](args);
 		end
+
+		local HashSet = {};
+		for i = 1, #ItemManager.ItemSlots do
+			local slot = ItemManager.ItemSlots[i];
+			local item = args.From:GetItemData(slot);
+			if item ~= nil and item.itemID > 0 then
+				if HashSet[item.itemID] == nil then
+					if self.StaticItemDamageDatabase[item.itemID] ~= nil then
+						self.StaticItemDamageDatabase[item.itemID](args);
+					end
+					HashSet[item.itemID] = true;
+				end
+			end
+		end
+
 		return args;
 	end
 
 	function __Damage:GetHeroAutoAttackDamage(from, target, static)
-		if targetIsMinion and Utilities:IsOtherMinion(target) then
+		local args = {
+			From = from,
+			Target = target,
+			RawTotal = static.RawTotal,
+			RawPhysical = static.RawPhysical,
+			RawMagical = static.RawMagical,
+			CalculatedTrue = static.CalculatedTrue,
+			CalculatedPhysical = static.CalculatedPhysical,
+			CalculatedMagical = static.CalculatedMagical,
+			DamageType = static.DamageType,
+			TargetIsMinion = target.type == Obj_AI_Minion,
+		};
+		if args.TargetIsMinion and Utilities:IsOtherMinion(args.Target) then
 			return 1;
 		end
-		local targetIsMinion = target.type == Obj_AI_Minion;
-		local RawTotal = tonumber(static.RawTotal);
-		local RawPhysical = tonumber(static.RawPhysical);
-		local RawMagical = tonumber(static.RawMagical);
-		local CalculatedTrue = tonumber(static.CalculatedTrue);
-		local CalculatedPhysical = tonumber(static.CalculatedPhysical);
-		local CalculatedMagical = tonumber(static.CalculatedMagical);
 		local CriticalStrike = false;
 
-		if static.DamageType == DAMAGE_TYPE_PHYSICAL then
-			RawPhysical = RawPhysical + RawTotal;
-		elseif static.DamageType == DAMAGE_TYPE_MAGICAL then
-			RawMagical = RawMagical + RawTotal;
-		elseif static.DamageType == DAMAGE_TYPE_TRUE then
-			CalculatedTrue = CalculatedTrue + RawTotal;
+		if args.DamageType == DAMAGE_TYPE_PHYSICAL then
+			args.RawPhysical = args.RawPhysical + args.RawTotal;
+		elseif args.DamageType == DAMAGE_TYPE_MAGICAL then
+			args.RawMagical = args.RawMagical + args.RawTotal;
+		elseif args.DamageType == DAMAGE_TYPE_TRUE then
+			args.CalculatedTrue = args.CalculatedTrue + args.RawTotal;
 		end
 
-		if RawPhysical > 0 then
-			CalculatedPhysical = CalculatedPhysical + self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, RawPhysical, false, static.DamageType == DAMAGE_TYPE_PHYSICAL);
+		if args.RawPhysical > 0 then
+			args.CalculatedPhysical = args.CalculatedPhysical + self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, args.RawPhysical, false, args.DamageType == DAMAGE_TYPE_PHYSICAL);
 		end
 
-		if RawMagical > 0 then
-			CalculatedMagical = CalculatedMagical + self:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, RawMagical, false, static.DamageType == DAMAGE_TYPE_MAGICAL);
+		if args.RawMagical > 0 then
+			args.CalculatedMagical = args.CalculatedMagical + self:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, args.RawMagical, false, args.DamageType == DAMAGE_TYPE_MAGICAL);
 		end
 
 		local percentMod = 1;
-		return percentMod * CalculatedPhysical + CalculatedMagical + CalculatedTrue;
+		return percentMod * args.CalculatedPhysical + args.CalculatedMagical + args.CalculatedTrue;
 	end
 
 	function __Damage:GetAutoAttackDamage(from, target, respectPassives)
@@ -432,6 +519,26 @@ class "__Damage"
 
 class "__Utilities"
 	function __Utilities:__init()
+		self.ChannelingBuffs = {
+			["Katarina"] = function(unit)
+				return BuffManager:HasBuff(unit, "katarinarsound");
+			end,
+			["Lucian"] = function(unit)
+				return BuffManager:HasBuff(unit, "LucianR");
+			end,
+			["Varus"] = function(unit)
+				return BuffManager:HasBuff(unit, "VarusQ");
+			end,
+			["Vi"] = function(unit)
+				return BuffManager:HasBuff(unit, "ViQ");
+			end,
+			["Vladimir"] = function(unit)
+				return BuffManager:HasBuff(unit, "VladimirE");
+			end,
+			["Xerath"] = function(unit)
+				return BuffManager:HasBuff(unit, "XerathArcanopulseChargeUp");
+			end,
+		};
 		self.SpecialAutoAttackRanges = {
 			["Caitlyn"] = function(from, target)
 				if target ~= nil and BuffManager:HasBuff(target, "CaitlynYordleTrapInternal") then
@@ -588,15 +695,15 @@ class "__Utilities"
 		return sqrt(self:GetDistanceSquared(a, b));
 	end
 
-	function __Utilities:IsInRange(from, target, range)
-		return self:GetDistanceSquared(from, target) <= range * range;
+	function __Utilities:IsInRange(from, target, range, addY)
+		return self:GetDistanceSquared(from, target, addY) <= range * range;
 	end
 
-	function __Utilities:IsInAutoAttackRange(from, target)
+	function __Utilities:IsInAutoAttackRange(from, target, addY)
 		if from.charName == "Azir" then
 			--TODO
 		end
-		return self:IsInRange(from, target, self:GetAutoAttackRange(from, target));
+		return self:IsInRange(from, target, self:GetAutoAttackRange(from, target, addY));
 	end
 
 	function __Utilities:TotalShield(target)
@@ -664,6 +771,13 @@ class "__Utilities"
 			return self.SlotToHotKeys[slot]();
 		end
 		return nil;
+	end
+
+	function __Utilities:IsChanneling(unit)
+		if self.ChannelingBuffs[unit.charName] ~= nil then
+			return self.ChannelingBuffs[unit.charName](unit);
+		end
+		return false;
 	end
 
 class "__Linq"
@@ -898,7 +1012,13 @@ class "__HealthPrediction"
 			local turret = t[i];
 			self:CheckNewState(turret);
 			newAlliesState[turret.networkID] = turret.attackData.state;
+			local target = turret.attackData.target;
+			if target ~= nil and target > 0 then
+				newAlliesTarget[target] = true;
+			end
 		end
+		self.AlliesState = newAlliesState;
+		self.AlliesTarget = newAlliesTarget;
 		local remove = {};
 		-- remove older attacks
 		for networkID, attacks in pairs(self.IncomingAttacks) do
@@ -916,8 +1036,6 @@ class "__HealthPrediction"
 		for i = 1, #remove do
 			table.remove(self.IncomingAttacks, remove[i]);
 		end
-		self.AlliesState = newAlliesState;
-		self.AlliesTarget = newAlliesTarget;
 	end
 
 	function __HealthPrediction:CheckNewState(target)
@@ -930,7 +1048,7 @@ class "__HealthPrediction"
 		end
 	end
 
-	function __HealthPrediction:IsTarget(target)
+	function __HealthPrediction:BeingTargeted(target)
 		return self.AlliesTarget[target.handle] ~= nil
 	end
 
@@ -963,7 +1081,7 @@ class "__HealthPrediction"
 				for i = 1, #attacks do
 					local attack = attacks[i];
 					if attack:EqualsTarget(target) then
-						health = health - attack:GetPredictedDamage(target, time);
+						health = health - attack:GetPredictedDamage(target, time, true);
 					end
 				end
 			end
@@ -1012,10 +1130,9 @@ class "__IncomingAttack"
 		return self.Source == nil or self.Source.dead or LocalGameTimer() - self.StartTime > 3 or self.Arrived;
 	end
 
-	function __IncomingAttack:GetPredictedDamage(target, delay)
+	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() - 0.0125;
 			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
 			if timeTillHit < 0 then
 				self.Arrived = true;
@@ -1023,11 +1140,17 @@ class "__IncomingAttack"
 			if not self.Arrived then
 				if self.IsActiveAttack and Utilities:IsValidTarget(self.Source) then
 					local count = 0;
-					while timeTillHit < delay do
-						if timeTillHit > 0 then
+					if addNextAutoAttacks then
+						while timeTillHit < delay do
+							if timeTillHit > 0 then
+								count = count + 1;
+							end
+							timeTillHit = timeTillHit + self.AnimationTime;
+						end
+					else
+						if timeTillHit < delay and timeTillHit > 0 then
 							count = count + 1;
 						end
-						timeTillHit = timeTillHit + self.AnimationTime;
 					end
 					if count > 0 then
 						damage = damage + self:GetAutoAttackDamage(target) * count;
@@ -1392,7 +1515,7 @@ class "__TargetSelector"
 			end
 		end
 		if msg == KEY_DOWN then
-			--print(wParam);
+
 		end
 	end
 
@@ -1462,13 +1585,22 @@ if not _G.iSDK_Loaded then
 	_G.iSDK_Loaded = true;
 end
 
-local ORBWALKER_MODE_NONE				= -1;
-local ORBWALKER_MODE_COMBO				= 0;
-local ORBWALKER_MODE_HARASS				= 1;
-local ORBWALKER_MODE_LANECLEAR			= 2;
-local ORBWALKER_MODE_JUNGLECLEAR		= 3;
-local ORBWALKER_MODE_LASTHIT			= 4;
-local ORBWALKER_MODE_FLEE				= 5;
+
+_G.ORBWALKER_MODE_NONE					= -1;
+_G.ORBWALKER_MODE_COMBO					= 0;
+_G.ORBWALKER_MODE_HARASS				= 1;
+_G.ORBWALKER_MODE_LANECLEAR				= 2;
+_G.ORBWALKER_MODE_JUNGLECLEAR			= 3;
+_G.ORBWALKER_MODE_LASTHIT				= 4;
+_G.ORBWALKER_MODE_FLEE					= 5;
+
+local ORBWALKER_MODE_NONE				= _G.ORBWALKER_MODE_NONE;
+local ORBWALKER_MODE_COMBO				= _G.ORBWALKER_MODE_COMBO;
+local ORBWALKER_MODE_HARASS				= _G.ORBWALKER_MODE_HARASS;
+local ORBWALKER_MODE_LANECLEAR			= _G.ORBWALKER_MODE_LANECLEAR;
+local ORBWALKER_MODE_JUNGLECLEAR		= _G.ORBWALKER_MODE_JUNGLECLEAR;
+local ORBWALKER_MODE_LASTHIT			= _G.ORBWALKER_MODE_LASTHIT;
+local ORBWALKER_MODE_FLEE				= _G.ORBWALKER_MODE_FLEE;
 
 local ORBWALKER_TARGET_TYPE_HERO			= 0;
 local ORBWALKER_TARGET_TYPE_MONSTER			= 1;
@@ -1538,10 +1670,27 @@ class "__Orbwalker"
 
 
 		self.ExtraWindUpTimes = {
-			["Jinx"] = 0.15,
-			["Rengar"] = 0.15,
+			--["Jinx"] = 0.15,
+			--["Rengar"] = 0.15,
 		};
-		self.DisableAutoAttacks = {
+		self.AllowMovement = {
+			["Lucian"] = function(unit)
+				return BuffManager:HasBuff(unit, "LucianR");
+			end,
+			["Varus"] = function(unit)
+				return BuffManager:HasBuff(unit, "VarusQ");
+			end,
+			["Vi"] = function(unit)
+				return BuffManager:HasBuff(unit, "ViQ");
+			end,
+			["Vladimir"] = function(unit)
+				return BuffManager:HasBuff(unit, "VladimirE");
+			end,
+			["Xerath"] = function(unit)
+				return BuffManager:HasBuff(unit, "XerathArcanopulseChargeUp");
+			end,
+		};
+		self.DisableAutoAttack = {
 			["Darius"] = function(unit)
 				return BuffManager:HasBuff(unit, "DariusQCast");
 			end,
@@ -1933,6 +2082,15 @@ class "__Orbwalker"
 				end
 			end
 		end
+		if Utilities:IsChanneling(unit) then
+			if self.AllowMovement[unit.charName] == nil then
+				return false;
+			else
+				if not self.AllowMovement[unit.charName](unit) then
+					return false;
+				end
+			end
+		end
 		local state = self:GetState(unit);
 		--[[
 			if state == STATE_WINDDOWN then
@@ -1954,7 +2112,10 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanAttack(unit)
 		unit = self:GetUnit(unit);
-		if self.DisableAutoAttacks[unit.charName] ~= nil and self.DisableAutoAttacks[unit.charName](unit) then
+		if Utilities:IsChanneling(unit) then
+			return false;
+		end
+		if self.DisableAutoAttack[unit.charName] ~= nil and self.DisableAutoAttack[unit.charName](unit) then
 			return false;
 		end
 		if unit.isMe then
@@ -2225,8 +2386,8 @@ class "__Orbwalker"
 					local attack = attacks[i];
 					local minion = Minions[attack.TargetHandle];
 					if minion ~= nil then
-						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime);
-						minion.LaneClearHealth = minion.LaneClearHealth - attack:GetPredictedDamage(minion.Minion, minion.LaneClearTime);
+						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, true);
+						minion.LaneClearHealth = minion.LaneClearHealth - attack:GetPredictedDamage(minion.Minion, minion.LaneClearTime, true);
 					end
 				end
 			end
@@ -2342,20 +2503,20 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsLastHittable()
-		return self.LastHitHealth <= OW:GetAutoAttackDamage(self.Minion);
+		return self.LastHitHealth <= Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
 	function __OrbwalkerMinion:IsAlmostLastHittable()
-		if OW.HealthPrediction:IsTarget(self.Minion) then
-			local health = (false) --[[TODO]] and self.LastHitHealth or self.LaneClearHealth;
-			local percentMod = Utilities:IsSiegeMinion(self.Minion) and 1.5 or 1;
-			return health <= percentMod * OW:GetAutoAttackDamage(self.Minion);
+		if abs(self.LaneClearHealth - self.Minion.health) < EPSILON then
+			return false;
 		end
-		return false;
+		local health = (false) --[[TODO]] and self.LastHitHealth or self.LaneClearHealth;
+		local percentMod = Utilities:IsSiegeMinion(self.Minion) and 1.5 or 1;
+		return health <= percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
 	function __OrbwalkerMinion:IsLaneClearable()
-		if OW.OnlyLastHit then
+		if Orbwalker.OnlyLastHit then
 			return false;
 		end
 		--[[
@@ -2363,21 +2524,21 @@ class "__OrbwalkerMinion"
 				return true;
 			end
 		]]
-		if not OW.HealthPrediction:IsTarget(self.Minion) then
 			return true;
 		end
 		local percentMod = 2;
 		if false --[[TODO]] then
 			percentMod = percentMod * 2;
 		end
-		return self.LaneClearHealth > percentMod * OW:GetAutoAttackDamage(self.Minion);
+		return self.LaneClearHealth > percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
-if not _G.ICOrbwalker then
+if not _G.IC_Orbwalker then
 	-- Disabling GoS orbwalker
-	_G.Orbwalker.Enabled:Value(false);
-	_G.Orbwalker.Drawings.Enabled:Value(false);
-
-	OW = __Orbwalker();
-	_G.ICOrbwalker = true;
+	if _G.Orbwalker then
+		_G.Orbwalker.Enabled:Value(false);
+		_G.Orbwalker.Drawings.Enabled:Value(false);
+	end
+	_G.IC_Orbwalker = __Orbwalker();
+	Orbwalker = _G.IC_Orbwalker;
 end
