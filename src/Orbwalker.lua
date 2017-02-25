@@ -1,6 +1,39 @@
 if _G.SDK then
 	return;
 end
+
+--[[
+	API:
+
+	_G.SDK.DAMAGE_TYPE_PHYSICAL
+	_G.SDK.DAMAGE_TYPE_MAGICAL
+	_G.SDK.DAMAGE_TYPE_TRUE
+	_G.SDK.ORBWALKER_MODE_NONE
+	_G.SDK.ORBWALKER_MODE_COMBO
+	_G.SDK.ORBWALKER_MODE_HARASS
+	_G.SDK.ORBWALKER_MODE_LANECLEAR
+	_G.SDK.ORBWALKER_MODE_JUNGLECLEAR
+	_G.SDK.ORBWALKER_MODE_LASTHIT
+	_G.SDK.ORBWALKER_MODE_FLEE
+
+	_G.SDK.Orbwalker
+		.ForceTarget -- GameObject
+		.ForceMovement -- Vector
+		.Modes[mode] -- if _G.SDK.Orbwalker.Modes[_G.SDK.ORBWALKER_MODE_COMBO] then DoCombo() end
+		:RegisterMenuKey(mode, key) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo)
+		:CanMove(unit or myHero)
+		:CanAttack(unit or myHero)
+		:GetTarget()
+		:ShouldWait()
+		:OnPreAttack(function({ Process, Target }) end)
+		:OnPreMovement(function({ Process, Target }) end)
+
+	_G.SDK.TargetSelector
+		:GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
+		:GetTarget(range: number, damageType: enum, from: Vector) -- returns a unit or nil
+		
+]]
+
 _G.SDK = {
 	DAMAGE_TYPE_PHYSICAL			= 0,
 	DAMAGE_TYPE_MAGICAL				= 1,
