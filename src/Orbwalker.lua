@@ -526,6 +526,9 @@ class "__Utilities"
 			["Lucian"] = function(unit)
 				return BuffManager:HasBuff(unit, "LucianR");
 			end,
+			["MissFortune"] = function(unit)
+				return BuffManager:HasBuff(unit, "missfortunebulletsound");
+			end,
 			["Varus"] = function(unit)
 				return BuffManager:HasBuff(unit, "VarusQ");
 			end,
@@ -1133,6 +1136,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
+			delay = delay + Utilities:GetLatency() - 0.012;
 			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
 			if timeTillHit < 0 then
 				self.Arrived = true;
@@ -2524,6 +2528,7 @@ class "__OrbwalkerMinion"
 				return true;
 			end
 		]]
+		if abs(self.LaneClearHealth - self.Minion.health) < EPSILON then
 			return true;
 		end
 		local percentMod = 2;
