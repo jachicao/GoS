@@ -520,17 +520,56 @@ class "__Damage"
 class "__Utilities"
 	function __Utilities:__init()
 		self.ChannelingBuffs = {
+			["Caitlyn"] = function(unit)
+				return BuffManager:HasBuff(unit, "CaitlynAceintheHole");
+			end,
+			["Fiddlesticks"] = function(unit)
+				return BuffManager:HasBuff(unit, "Drain") or BuffManager:HasBuff(unit, "Crowstorm");
+			end,
+			["Galio"] = function(unit)
+				return BuffManager:HasBuff(unit, "GalioIdolOfDurand");
+			end,
+			["Janna"] = function(unit)
+				return BuffManager:HasBuff(unit, "ReapTheWhirlwind");
+			end,
+			["Karthus"] = function(unit)
+				return BuffManager:HasBuff(unit, "karthusfallenonecastsound");
+			end,
 			["Katarina"] = function(unit)
 				return BuffManager:HasBuff(unit, "katarinarsound");
 			end,
 			["Lucian"] = function(unit)
 				return BuffManager:HasBuff(unit, "LucianR");
 			end,
+			["Malzahar"] = function(unit)
+				return BuffManager:HasBuff(unit, "alzaharnethergraspsound");
+			end,
+			["MasterYi"] = function(unit)
+				return BuffManager:HasBuff(unit, "Meditate");
+			end,
 			["MissFortune"] = function(unit)
 				return BuffManager:HasBuff(unit, "missfortunebulletsound");
 			end,
+			["Nunu"] = function(unit)
+				return BuffManager:HasBuff(unit, "AbsoluteZero");
+			end,
+			["Pantheon"] = function(unit)
+				return BuffManager:HasBuff(unit, "PantheonRJump");
+			end,
+			["Shen"] = function(unit)
+				return BuffManager:HasBuff(unit, "shenstandunitedlock");
+			end,
+			["TwistedFate"] = function(unit)
+				return BuffManager:HasBuff(unit, "Destiny");
+			end,
+			["Urgot"] = function(unit)
+				return BuffManager:HasBuff(unit, "UrgotSwap2");
+			end,
 			["Varus"] = function(unit)
 				return BuffManager:HasBuff(unit, "VarusQ");
+			end,
+			["VelKoz"] = function(unit)
+				return BuffManager:HasBuff(unit, "VelkozR");
 			end,
 			["Vi"] = function(unit)
 				return BuffManager:HasBuff(unit, "ViQ");
@@ -538,8 +577,11 @@ class "__Utilities"
 			["Vladimir"] = function(unit)
 				return BuffManager:HasBuff(unit, "VladimirE");
 			end,
+			["Warwick"] = function(unit)
+				return BuffManager:HasBuff(unit, "infiniteduresssound");
+			end,
 			["Xerath"] = function(unit)
-				return BuffManager:HasBuff(unit, "XerathArcanopulseChargeUp");
+				return BuffManager:HasBuff(unit, "XerathArcanopulseChargeUp") or BuffManager:HasBuff(unit, "XerathLocusOfPower2");
 			end,
 		};
 		self.SpecialAutoAttackRanges = {
@@ -1223,7 +1265,7 @@ class "__TargetSelector"
 			["Elise"] = 2,
 			["Evelynn"] = 2,
 			["Ezreal"] = 4,
-			["FiddleSticks"] = 3,
+			["Fiddlesticks"] = 3,
 			["Fiora"] = 3,
 			["Fizz"] = 3,
 			["Galio"] = 2,
