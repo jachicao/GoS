@@ -1,4 +1,18 @@
-iSDK_Version = 0.1;
+if _G.SDK then
+	return;
+end
+_G.SDK = {
+	DAMAGE_TYPE_PHYSICAL			= 0,
+	DAMAGE_TYPE_MAGICAL				= 1,
+	DAMAGE_TYPE_TRUE				= 2,
+	ORBWALKER_MODE_NONE				= -1,
+	ORBWALKER_MODE_COMBO			= 0,
+	ORBWALKER_MODE_HARASS			= 1,
+	ORBWALKER_MODE_LANECLEAR		= 2,
+	ORBWALKER_MODE_JUNGLECLEAR		= 3,
+	ORBWALKER_MODE_LASTHIT			= 4,
+	ORBWALKER_MODE_FLEE				= 5,
+};
 
 local LocalCallbackAdd				= Callback.Add;
 local LocalCallbackDel				= Callback.Del;
@@ -67,14 +81,16 @@ local Obj_GeneralParticleEmitter	= "obj_GeneralParticleEmitter";
 local LocalTableInsert				= table.insert;
 local LocalTableSort				= table.sort;
 local LocalTableRemove				= table.remove;
+
 local tonumber						= tonumber;
 local ipairs						= ipairs;
 local pairs							= pairs;
-local max 							= math.max;
-local min 							= math.min;
-local sqrt 							= math.sqrt;
-local huge 							= math.huge;
-local abs 							= math.abs;
+
+local LocalMathMax					= math.max;
+local LocalMathMin					= math.min;
+local LocalMathSqrt					= math.sqrt;
+local LocalMathHuge					= math.huge;
+local LocalMathAbs					= math.abs;
 
 local EPSILON						= 1E-12;
 
@@ -85,13 +101,9 @@ local COLOR_WHITE					= LocalDrawColor(255, 255, 255, 255);
 local COLOR_BLACK					= LocalDrawColor(255, 0, 0, 0);
 local COLOR_RED						= LocalDrawColor(255, 255, 0, 0);
 
-_G.DAMAGE_TYPE_PHYSICAL		= 0;
-_G.DAMAGE_TYPE_MAGICAL		= 1;
-_G.DAMAGE_TYPE_TRUE			= 2;
-
-local DAMAGE_TYPE_PHYSICAL	= _G.DAMAGE_TYPE_PHYSICAL;
-local DAMAGE_TYPE_MAGICAL	= _G.DAMAGE_TYPE_MAGICAL;
-local DAMAGE_TYPE_TRUE		= _G.DAMAGE_TYPE_TRUE;
+local DAMAGE_TYPE_PHYSICAL			= _G.SDK.DAMAGE_TYPE_PHYSICAL;
+local DAMAGE_TYPE_MAGICAL			= _G.SDK.DAMAGE_TYPE_MAGICAL;
+local DAMAGE_TYPE_TRUE				= _G.SDK.DAMAGE_TYPE_TRUE;
 
 local TARGET_SELECTOR_MODE_AUTO							= 1;
 local TARGET_SELECTOR_MODE_MOST_STACK					= 2;
@@ -336,7 +348,7 @@ class "__Damage"
 	end
 
 	function __Damage:GetMaxLevel(hero)
-		return max(min(hero.levelData.lvl, 18), 1);
+		return LocalMathMax(LocalMathMin(hero.levelData.lvl, 18), 1);
 	end
 
 	function __Damage:CalculateDamage(from, target, damageType, rawDamage, isAbility, isAutoAttackOrTargetted)
@@ -360,7 +372,7 @@ class "__Damage"
 		local bonusPenetrationPercent = 0;
 
 		if damageType == DAMAGE_TYPE_PHYSICAL then
-			baseResistance = max(target.armor - target.bonusArmor, 0);
+			baseResistance = LocalMathMax(target.armor - target.bonusArmor, 0);
 			bonusResistance = target.bonusArmor;
 			penetrationFlat = from.armorPen;
 			penetrationPercent = from.armorPenPercent;
@@ -377,7 +389,7 @@ class "__Damage"
 				bonusPenetrationPercent = 0;
 			end
 		elseif damageType == DAMAGE_TYPE_MAGICAL then
-			baseResistance = max(target.magicResist - target.bonusMagicResist, 0);
+			baseResistance = LocalMathMax(target.magicResist - target.bonusMagicResist, 0);
 			bonusResistance = target.bonusMagicResist;
 			penetrationFlat = from.magicPen;
 			penetrationPercent = from.magicPenPercent;
@@ -418,7 +430,7 @@ class "__Damage"
 			flatReceived = flatReceived - target.flatDamageReduction;
 		end
 
-		return max(percentReceived * percentPassive * percentMod * (rawDamage + flatPassive) + flatReceived, 0);
+		return LocalMathMax(percentReceived * percentPassive * percentMod * (rawDamage + flatPassive) + flatReceived, 0);
 	end
 
 	function __Damage:GetStaticAutoAttackDamage(from, targetIsMinion)
@@ -554,7 +566,7 @@ class "__Utilities"
 				return BuffManager:HasBuff(unit, "AbsoluteZero");
 			end,
 			["Pantheon"] = function(unit)
-				return BuffManager:HasBuff(unit, "PantheonRJump");
+				return BuffManager:HasBuff(unit, "PantheonE") or BuffManager:HasBuff(unit, "PantheonRJump");
 			end,
 			["Shen"] = function(unit)
 				return BuffManager:HasBuff(unit, "shenstandunitedlock");
@@ -666,7 +678,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:IsMelee(target)
-		if abs(target.attackData.projectileSpeed) < EPSILON then
+		if LocalMathAbs(target.attackData.projectileSpeed) < EPSILON then
 			return true;
 		end
 		if self.SpecialMelees[target.charName] ~= nil then
@@ -737,7 +749,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetDistance(a, b, addY)
-		return sqrt(self:GetDistanceSquared(a, b));
+		return LocalMathSqrt(self:GetDistanceSquared(a, b));
 	end
 
 	function __Utilities:IsInRange(from, target, range, addY)
@@ -1142,7 +1154,7 @@ class "__IncomingAttack"
 		self.Arrived = false;
 		self.IsActiveAttack = true;
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
-		self.MissileSpeed = self.SourceIsMelee and huge or self.Source.attackData.projectileSpeed;
+		self.MissileSpeed = self.SourceIsMelee and LocalMathHuge or self.Source.attackData.projectileSpeed;
 		self.SourcePosition = self.Source.pos;
 		self.WindUpTime = self.Source.attackData.windUpTime;
 		self.AnimationTime = self.Source.attackData.animationTime;
@@ -1405,15 +1417,15 @@ class "__TargetSelector"
 					local t = self.BuffStackNames["All"];
 					for i = 1, #t do
 						local buffName = t[i];
-						firstStack = firstStack + max(0, BuffManager:GetBuffCount(a, buffName));
-						secondStack = secondStack + max(0, BuffManager:GetBuffCount(b, buffName));
+						firstStack = firstStack + LocalMathMax(0, BuffManager:GetBuffCount(a, buffName));
+						secondStack = secondStack + LocalMathMax(0, BuffManager:GetBuffCount(b, buffName));
 					end
 					if self.BuffStackNames[myHero.charName] ~= nil then
 						local t = self.BuffStackNames[myHero.charName];
 						for i = 1, #t do
 							local buffName = t[i];
-							firstStack = firstStack + max(0, BuffManager:GetBuffCount(a, buffName)); 
-							secondStack = secondStack + max(0, BuffManager:GetBuffCount(b, buffName));
+							firstStack = firstStack + LocalMathMax(0, BuffManager:GetBuffCount(a, buffName)); 
+							secondStack = secondStack + LocalMathMax(0, BuffManager:GetBuffCount(b, buffName));
 						end
 					end
 					local first = firstStack * self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / a.health;
@@ -1587,66 +1599,59 @@ class "__TargetSelector"
 		end
 	end
 
-	function __TargetSelector:GetTarget(targets, damageType)
-		local validTargets = {};
-		for i = 1, #targets do
-			local target = targets[i];
-			if not Utilities:HasUndyingBuff(target) then
-				Linq:Add(validTargets, target);
-			end
-		end
-		if #validTargets > 0 then
-			targets = validTargets;
-		end
-		local SelectedTargetIsValid = Utilities:IsValidTarget(self.SelectedTarget);
-		
-		if #targets == 0 then
-			return nil;
-		end
-		if #targets == 1 then
-			return targets[1];
-		end
-		if SelectedTargetIsValid then
+	function __TargetSelector:GetTarget(a, damageType, from, addBoundingRadius)
+		if type(a) == "table" then
+			local targets = a;
+			local validTargets = {};
 			for i = 1, #targets do
-				if Utilities:IdEquals(targets[i], self.SelectedTarget) then
-					return self.SelectedTarget;
+				local target = targets[i];
+				if not Utilities:HasUndyingBuff(target) then
+					Linq:Add(validTargets, target);
 				end
 			end
-		end
-		local Mode = self.Menu.Mode:Value();
-		if self.Selector[Mode] ~= nil then
-			return self.Selector[Mode](targets, damageType);
+			if #validTargets > 0 then
+				targets = validTargets;
+			end
+			if #targets == 0 then
+				return nil;
+			end
+			if #targets == 1 then
+				return targets[1];
+			end
+			if Utilities:IsValidTarget(self.SelectedTarget) then
+				for i = 1, #targets do
+					if Utilities:IdEquals(targets[i], self.SelectedTarget) then
+						return self.SelectedTarget;
+					end
+				end
+			end
+			local Mode = self.Menu.Mode:Value();
+			if self.Selector[Mode] ~= nil then
+				return self.Selector[Mode](targets, damageType);
+			end
+		else
+			local range = a;
+			local from = from ~= nil and from or myHero.pos;
+			local t = {};
+			local enemies = ObjectManager:GetEnemyHeroes();
+			for i = 1, #enemies do
+				local enemy = enemies[i];
+				if Utilities:IsInRange(from, enemy, range) then
+					Linq:Add(t, enemy);
+				end
+			end
+			return self:GetTarget(t, damageType);
 		end
 		return nil;
 	end
 
-if not _G.iSDK_Loaded then
-	Linq = __Linq();
-	ObjectManager = __ObjectManager();
-	Utilities = __Utilities();
-	BuffManager = __BuffManager();
-	ItemManager = __ItemManager();
-	Damage = __Damage();
-	TargetSelector = __TargetSelector();
-	_G.iSDK_Loaded = true;
-end
-
-
-_G.ORBWALKER_MODE_NONE					= -1;
-_G.ORBWALKER_MODE_COMBO					= 0;
-_G.ORBWALKER_MODE_HARASS				= 1;
-_G.ORBWALKER_MODE_LANECLEAR				= 2;
-_G.ORBWALKER_MODE_JUNGLECLEAR			= 3;
-_G.ORBWALKER_MODE_LASTHIT				= 4;
-_G.ORBWALKER_MODE_FLEE					= 5;
-
-local ORBWALKER_MODE_NONE				= _G.ORBWALKER_MODE_NONE;
-local ORBWALKER_MODE_COMBO				= _G.ORBWALKER_MODE_COMBO;
-local ORBWALKER_MODE_HARASS				= _G.ORBWALKER_MODE_HARASS;
-local ORBWALKER_MODE_LANECLEAR			= _G.ORBWALKER_MODE_LANECLEAR;
-local ORBWALKER_MODE_JUNGLECLEAR		= _G.ORBWALKER_MODE_JUNGLECLEAR;
-local ORBWALKER_MODE_LASTHIT			= _G.ORBWALKER_MODE_LASTHIT;
-local ORBWALKER_MODE_FLEE				= _G.ORBWALKER_MODE_FLEE;
+local ORBWALKER_MODE_NONE				= _G.SDK.ORBWALKER_MODE_NONE;
+local ORBWALKER_MODE_COMBO				= _G.SDK.ORBWALKER_MODE_COMBO;
+local ORBWALKER_MODE_HARASS				= _G.SDK.ORBWALKER_MODE_HARASS;
+local ORBWALKER_MODE_LANECLEAR			= _G.SDK.ORBWALKER_MODE_LANECLEAR;
+local ORBWALKER_MODE_JUNGLECLEAR		= _G.SDK.ORBWALKER_MODE_JUNGLECLEAR;
+local ORBWALKER_MODE_LASTHIT			= _G.SDK.ORBWALKER_MODE_LASTHIT;
+local ORBWALKER_MODE_FLEE				= _G.SDK.ORBWALKER_MODE_FLEE;
 
 local ORBWALKER_TARGET_TYPE_HERO			= 0;
 local ORBWALKER_TARGET_TYPE_MONSTER			= 1;
@@ -1741,7 +1746,7 @@ class "__Orbwalker"
 				return BuffManager:HasBuff(unit, "DariusQCast");
 			end,
 			["Graves"] = function(unit)
-				if abs(unit.hudAmmo) < EPSILON then
+				if LocalMathAbs(unit.hudAmmo) < EPSILON then
 					return true;
 				end
 				return false;
@@ -1750,7 +1755,7 @@ class "__Orbwalker"
 				if BuffManager:HasBuff(unit, "JhinPassiveReload") then
 					return true;
 				end
-				if abs(unit.hudAmmo) < EPSILON then
+				if LocalMathAbs(unit.hudAmmo) < EPSILON then
 					return true;
 				end
 				return false;
@@ -1988,7 +1993,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetLastIssueOrder()
-		return max(self.LastAutoAttackSent, self.LastMovementSent);
+		return LocalMathMax(self.LastAutoAttackSent, self.LastMovementSent);
 	end
 
 	function __Orbwalker:Move()
@@ -2063,10 +2068,10 @@ class "__Orbwalker"
 		end
 		if self.Menu.Drawings.LastHittableMinions:Value() then
 			if self.LastHitMinion ~= nil then
-				LocalDrawCircle(self.LastHitMinion.pos, max(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
+				LocalDrawCircle(self.LastHitMinion.pos, LocalMathMax(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
 			end
 			if self.AlmostLastHitMinion ~= nil and not Utilities:IdEquals(self.AlmostLastHitMinion, self.LastHitMinion) then
-				LocalDrawCircle(self.AlmostLastHitMinion.pos, max(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
+				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
 		--[[
@@ -2081,7 +2086,7 @@ class "__Orbwalker"
 					if self.LastMinionDraw[time] == nil then
 						self.LastMinionDraw[time] = {};
 					end
-					Linq:Add(self.LastMinionDraw[time], { Text = "Lost " .. abs(self.LastMinionHealth[minion.networkID] - health), Position = minion.pos:To2D() });
+					Linq:Add(self.LastMinionDraw[time], { Text = "Lost " .. LocalMathAbs(self.LastMinionHealth[minion.networkID] - health), Position = minion.pos:To2D() });
 					local counter = 1;
 					for _, attacks in pairs(self.HealthPrediction.IncomingAttacks) do
 						if #attacks > 0 then
@@ -2254,7 +2259,7 @@ class "__Orbwalker"
 			end
 		end
 		if Utilities:IsMelee(unit) then
-			return huge;
+			return LocalMathHuge;
 		end
 		return unit.attackData.projectileSpeed;
 	end
@@ -2410,7 +2415,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CalculateLastHittableMinions()
-		local extraTime = 0;--TODO (not self:CanIssueOrder()) and max(0, self:GetEndTime() - LocalGameTimer()) or 0;
+		local extraTime = 0;--TODO (not self:CanIssueOrder()) and LocalMathMax(0, self:GetEndTime() - LocalGameTimer()) or 0;
 		local maxMissileTravelTime = self.MyHeroIsMelee and 0 or (Utilities:GetAutoAttackRange(myHero) / self:GetMissileSpeed());
 		local Minions = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
@@ -2421,7 +2426,7 @@ class "__Orbwalker"
 				local windUpTime = self:GetWindUpTime(myHero, minion) + ExtraFarmDelay;
 				local missileTravelTime = self.MyHeroIsMelee and 0 or (Utilities:GetDistance(myHero, minion) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
-				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + max(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
+				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
 				orbwalkerMinion.LaneClearTime = self:GetAnimationTime(myHero, minion) + windUpTime + maxMissileTravelTime;
 				Minions[minion.handle] = orbwalkerMinion;
 			end
@@ -2553,7 +2558,7 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsAlmostLastHittable()
-		if abs(self.LaneClearHealth - self.Minion.health) < EPSILON then
+		if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < EPSILON then
 			return false;
 		end
 		local health = (false) --[[TODO]] and self.LastHitHealth or self.LaneClearHealth;
@@ -2566,11 +2571,11 @@ class "__OrbwalkerMinion"
 			return false;
 		end
 		--[[
-			if abs(self.LaneClearHealth - self.Minion.health) < 1E-12 then
+			if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < 1E-12 then
 				return true;
 			end
 		]]
-		if abs(self.LaneClearHealth - self.Minion.health) < EPSILON then
+		if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < EPSILON then
 			return true;
 		end
 		local percentMod = 2;
@@ -2580,12 +2585,28 @@ class "__OrbwalkerMinion"
 		return self.LaneClearHealth > percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
-if not _G.IC_Orbwalker then
-	-- Disabling GoS orbwalker
-	if _G.Orbwalker then
-		_G.Orbwalker.Enabled:Value(false);
-		_G.Orbwalker.Drawings.Enabled:Value(false);
-	end
-	_G.IC_Orbwalker = __Orbwalker();
-	Orbwalker = _G.IC_Orbwalker;
+
+-- Disabling GoS orbwalker
+if _G.Orbwalker then
+	_G.Orbwalker.Enabled:Value(false);
+	_G.Orbwalker.Drawings.Enabled:Value(false);
 end
+
+
+Linq = __Linq();
+ObjectManager = __ObjectManager();
+Utilities = __Utilities();
+BuffManager = __BuffManager();
+ItemManager = __ItemManager();
+Damage = __Damage();
+TargetSelector = __TargetSelector();
+Orbwalker = __Orbwalker();
+
+_G.SDK.Linq = Linq;
+_G.SDK.ObjectManager = ObjectManager;
+_G.SDK.Utilities = Utilities;
+_G.SDK.BuffManager = BuffManager;
+_G.SDK.ItemManager = ItemManager;
+_G.SDK.Damage = Damage;
+_G.SDK.TargetSelector = TargetSelector;
+_G.SDK.Orbwalker = Orbwalker;
