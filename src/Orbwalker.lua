@@ -29,8 +29,8 @@ end
         :RegisterMenuKey(mode: enum, key: menu) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo); Only needed for extra keys
 
     _G.SDK.TargetSelector
-        :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
-        :GetTarget(range: number, damageType: enum, from: Vector) -- returns a unit or nil
+        :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
+        :GetTarget(range: number, damageType: enum, from: Vector or myHero.pos) -- local target = _G.SDK.TargetSelector:GetTarget(1000, _G.SDK.DAMAGE_TYPE_PHYSICAL);
 ]]
 
 _G.SDK = {
@@ -59,8 +59,6 @@ local LocalCallbackDel				= Callback.Del;
 local LocalDrawColor				= Draw.Color;
 local LocalDrawCircle				= Draw.Circle;
 local LocalDrawText					= Draw.Text;
-local LocalControlMove				= Control.Move;
-local LocalControlAttack			= Control.Attack;
 local LocalControlKeyUp				= Control.KeyUp;
 local LocalControlKeyDown			= Control.KeyDown;
 local LocalGameLatency				= Game.Latency;
@@ -193,6 +191,46 @@ LocalCallbackAdd('Load', function()
 		end
 	end);
 end);
+
+class "__ClickBlocker"
+	function __ClickBlocker:__init()
+		local CLICK_TYPE_CASTSPELL 			= 1;
+		local CLICK_TYPE_ATTACK				= 2;
+		local CLICK_TYPE_MOVE				= 3;
+		local LocalControlCastSpell			= Control.CastSpell;
+		local LocalControlMove				= Control.Move;
+		local LocalControlAttack			= Control.Attack;
+		
+		local LastClickSent = 0;
+		local LastClickType = -1;
+		_G.Control.CastSpell = function(...)
+			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_CASTSPELL then
+				return nil;
+			end
+			LastClickSent = LocalGameTimer();
+			LastClickType = CLICK_TYPE_CASTSPELL;
+			return LocalControlCastSpell(...);
+		end
+		_G.Control.Attack = function(...)
+			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_ATTACK then
+				return nil;
+			end
+			LastClickSent = LocalGameTimer();
+			LastClickType = CLICK_TYPE_ATTACK;
+			return LocalControlAttack(...);
+		end
+		
+		_G.Control.Move = function(...)
+			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_MOVE then
+				return nil;
+			end
+			LastClickSent = LocalGameTimer();
+			LastClickType = CLICK_TYPE_MOVE;
+			return LocalControlMove(...);
+		end
+	end
+
+__ClickBlocker();
 
 class "__BuffManager"
 	function __BuffManager:__init()
@@ -1233,22 +1271,26 @@ class "__HealthPrediction"
 		end
 		self.AlliesState = newAlliesState;
 		self.AlliesTarget = newAlliesTarget;
-		local remove = {};
+		local removeFromIncomingAttacks = {};
+		local removeFromAttacks = {};
 		-- remove older attacks
 		for networkID, attacks in pairs(self.IncomingAttacks) do
 			if #attacks > 0 then
+				removeFromAttacks = {};
 				for i = 1, #attacks do
 					if attacks[i]:ShouldRemove() then
-						table.remove(attacks, i);
-						break;
+						Linq:Add(removeFromAttacks, i);
 					end
 				end
+				for i = 1, #removeFromAttacks do
+					table.remove(attacks, removeFromAttacks[i]);
+				end
 			else
-				Linq:Add(remove, networkID);
+				Linq:Add(removeFromIncomingAttacks, networkID);
 			end
 		end
-		for i = 1, #remove do
-			table.remove(self.IncomingAttacks, remove[i]);
+		for i = 1, #removeFromIncomingAttacks do
+			table.remove(self.IncomingAttacks, removeFromIncomingAttacks[i]);
 		end
 	end
 
@@ -1308,6 +1350,7 @@ class "__IncomingAttack"
 		self.Source = source;
 		self.TargetHandle = targetHandle;
 		self.SourceIsValid = true;
+		self.boundingRadius = self.Source.boundingRadius
 		self.Arrived = false;
 		self.IsActiveAttack = true;
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
@@ -1325,15 +1368,15 @@ class "__IncomingAttack"
 		return self.AutoAttackDamage;
 	end
 
-	function __IncomingAttack:GetArrivalTime(target)
-		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + 0.25;
-	end
-
 	function __IncomingAttack:GetMissileTime(target)
 		if self.SourceIsMelee then
 			return 0;
 		end
-		return ((Utilities:GetDistance(self.SourcePosition, target)) / self.MissileSpeed);
+		return ((Utilities:GetDistance(self.SourcePosition, target) --[[ - self.boundingRadius]]) / self.MissileSpeed);
+	end
+
+	function __IncomingAttack:GetArrivalTime(target)
+		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + 0.025;
 	end
 
 	function __IncomingAttack:EqualsTarget(target)
@@ -1870,6 +1913,7 @@ class "__Orbwalker"
 		self.OnPreMovementCallbacks = {};
 
 		self.HoldPosition = nil;
+		self.LastHoldPosition = 0;
 
 		self.LastMinionHealth = {};
 		self.LastMinionDraw = {};
@@ -2149,7 +2193,7 @@ class "__Orbwalker"
 				end
 				if args.Process and args.Target ~= nil then
 					self.LastAutoAttackSent = LocalGameTimer();
-					LocalControlAttack(args.Target);
+					_G.Control.Attack(args.Target);
 					self.HoldPosition = nil;
 					return;
 				end
@@ -2206,17 +2250,21 @@ class "__Orbwalker"
 			if args.Process and args.Target ~= nil then
 				self.LastMovementSent = LocalGameTimer();
 				if args.Target == mousePos then
-					LocalControlMove();
+					_G.Control.Move();
 				else
-					LocalControlMove(args.Target);
+					_G.Control.Move(args.Target);
 				end
 				return;
 			end
 		end
 		if hold then
 			if self.HoldPosition == nil or (not (self.HoldPosition == myHero.pos)) then
-				LocalControlKeyUp(72);
+				LocalControlKeyDown(72);
 				self.HoldPosition = myHero.pos;
+				self.LastHoldPosition = LocalGameTimer();
+			elseif LocalGameTimer() - self.LastHoldPosition > 0.1 and self.LastHoldPosition > 0 then
+				LocalControlKeyUp(72);
+				self.LastHoldPosition = 0;
 			end
 		end
 	end
@@ -2606,7 +2654,7 @@ class "__Orbwalker"
 			local minion = EnemyMinionsInRange[i];
 			if Utilities:IsInRange(myHero, minion, 1500) then
 				local windUpTime = self:GetWindUpTime(myHero, minion) + ExtraFarmDelay;
-				local missileTravelTime = self.MyHeroIsMelee and 0 or (Utilities:GetDistance(myHero, minion) / self:GetMissileSpeed());
+				local missileTravelTime = self.MyHeroIsMelee and 0 or ((Utilities:GetDistance(myHero, minion) --[[ - myHero.boundingRadius]]) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
 				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
 				orbwalkerMinion.LaneClearTime = self:GetAnimationTime(myHero, minion) + windUpTime + maxMissileTravelTime;
