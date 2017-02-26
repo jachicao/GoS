@@ -166,7 +166,7 @@ local ObjectManager = nil;
 local TargetSelector = nil;
 local Orbwalker = nil;
 
-local myHero = nil;
+local myHero = _G.myHero;
 local EnemiesInGame = {};
 
 local LoadCallbacks = {};
@@ -176,6 +176,7 @@ end
 
 LocalCallbackAdd('Load', function()
 	local Loaded = false;
+	myHero = _G.myHero;
 	local id = LocalCallbackAdd('Tick', function()
 		if not Loaded then
 			if LocalGameHeroCount() > 1 or LocalGameTimer() > 30 then
