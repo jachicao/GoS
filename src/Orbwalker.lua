@@ -192,6 +192,20 @@ LocalCallbackAdd('Load', function()
 	end);
 end);
 
+--[[
+
+AddLoadCallback(function()
+	LocalCallbackAdd('Tick', function()
+		if _G.Game.CanUseSpell(_Q) == READY then
+			local t = ObjectManager:GetEnemyMinions();
+			for i = 1, #t do
+				_G.Control.CastSpell(HK_Q, t[i].pos)
+			end
+		end
+	end);
+end);
+
+]]
 class "__ClickBlocker"
 	function __ClickBlocker:__init()
 		local CLICK_TYPE_CASTSPELL 			= 1;
@@ -201,36 +215,37 @@ class "__ClickBlocker"
 		local LocalControlMove				= Control.Move;
 		local LocalControlAttack			= Control.Attack;
 		
-		local LastClickSent = 0;
+		local NextClick = 0;
 		local LastClickType = -1;
 		_G.Control.CastSpell = function(...)
-			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_CASTSPELL then
+			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_CASTSPELL then
 				return nil;
 			end
-			LastClickSent = LocalGameTimer();
+			NextClick = LocalGameTimer() + 0.25;
 			LastClickType = CLICK_TYPE_CASTSPELL;
 			return LocalControlCastSpell(...);
 		end
+
 		_G.Control.Attack = function(...)
-			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_ATTACK then
+			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_ATTACK then
 				return nil;
 			end
-			LastClickSent = LocalGameTimer();
+			NextClick = LocalGameTimer() + 0.25;
 			LastClickType = CLICK_TYPE_ATTACK;
 			return LocalControlAttack(...);
 		end
 		
 		_G.Control.Move = function(...)
-			if LocalGameTimer() - LastClickSent <= 0.2 and LastClickType ~= CLICK_TYPE_MOVE then
+			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_MOVE then
 				return nil;
 			end
-			LastClickSent = LocalGameTimer();
+			NextClick = LocalGameTimer() + 0.25;
 			LastClickType = CLICK_TYPE_MOVE;
 			return LocalControlMove(...);
 		end
 	end
 
-__ClickBlocker();
+--__ClickBlocker();
 
 class "__BuffManager"
 	function __BuffManager:__init()
@@ -2041,7 +2056,7 @@ class "__Orbwalker"
 					local t = ObjectManager:GetAllyHeroes();
 					for i = 1, #t do
 						local hero = t[i];
-						if (not hero.isMe) and Utilities:IsInRange(myHero, hero, 1500) then
+						if (not hero.isMe) and Utilities:IsValidTarget(hero) and Utilities:IsInRange(myHero, hero, 1500) then
 							SupportMode = true;
 							break;
 						end
@@ -2172,6 +2187,10 @@ class "__Orbwalker"
 				self:CalculateLastHittableMinions();
 			end
 		end
+		if LocalGameTimer() - self.LastHoldPosition > 0.025 and self.LastHoldPosition > 0 then
+				LocalControlKeyUp(72);
+				self.LastHoldPosition = 0;
+		end
 		if (not self.IsNone) then
 			self:Orbwalk();
 		end
@@ -2199,15 +2218,10 @@ class "__Orbwalker"
 				end
 			end
 		end
-		--Delay for cursor to come back
 		if LocalGameTimer() - self.LastAutoAttackSent <= 0.2 then
 			return;
 		end
 		self:Move();
-	end
-
-	function __Orbwalker:GetLastIssueOrder()
-		return LocalMathMax(self.LastAutoAttackSent, self.LastMovementSent);
 	end
 
 	function __Orbwalker:Move()
@@ -2262,9 +2276,6 @@ class "__Orbwalker"
 				LocalControlKeyDown(72);
 				self.HoldPosition = myHero.pos;
 				self.LastHoldPosition = LocalGameTimer();
-			elseif LocalGameTimer() - self.LastHoldPosition > 0.1 and self.LastHoldPosition > 0 then
-				LocalControlKeyUp(72);
-				self.LastHoldPosition = 0;
 			end
 		end
 	end
@@ -2388,7 +2399,7 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+			if LocalGameTimer() - self.LastAutoAttackSent <= self:IssueOrderDelay() then
 				local state = self:GetState(unit);
 				if state == STATE_WINDUP or state == STATE_WINDDOWN then
 					return false;
@@ -2398,12 +2409,20 @@ class "__Orbwalker"
 		return self:CanIssueOrder(unit);
 	end
 
+	function __Orbwalker:IssueOrderDelay()
+		return Utilities:GetLatency() + 0.15;
+	end
+
+	function __Orbwalker:CanAttackTime()
+		return LocalGameTimer() - self:GetEndTime(unit) + self:IssueOrderDelay();
+	end
+
 	function __Orbwalker:CanIssueOrder(unit)
 		unit = self:GetUnit(unit);
 		if self:GetState(unit) == STATE_ATTACK then
 			return true;
 		end
-		return LocalGameTimer() - self:GetEndTime(unit) + Utilities:GetLatency() + 0.07 >= 0;
+		return self:CanAttackTime() >= 0;
 	end
 
 	function __Orbwalker:GetState(unit)
