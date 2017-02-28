@@ -2304,6 +2304,12 @@ class "__Orbwalker"
 			end
 		end
 		--[[
+		local stateTable = {};
+		stateTable[STATE_UNKNOWN] 	= "STATE_UNKNOWN";
+		stateTable[STATE_ATTACK]	= "STATE_ATTACK";
+		stateTable[STATE_WINDUP] 	= "STATE_WINDUP";
+		stateTable[STATE_WINDDOWN] 	= "STATE_WINDDOWN";
+		LocalDrawText(tostring(self:CanAttackTime()) .. " " .. tostring(self:CanIssueOrder()) .. " " .. tostring(stateTable[self:GetState()]), myHero.pos:To2D());
 		local tempLastMinionHealth = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		for i = 1, #EnemyMinionsInRange do
