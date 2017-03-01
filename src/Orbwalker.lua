@@ -1019,7 +1019,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetClickDelay()
-		return 0.03;
+		return 0.06;
 	end
 
 	function __Utilities:GetHotKeyFromSlot(slot)
@@ -1040,10 +1040,12 @@ class "__Utilities"
 		return unit:GetSpellData(slot).level;
 	end
 
-
-
 	function __Utilities:GetLevel(unit)
 		return unit.levelData.lvl;
+	end
+
+	function __Utilities:GetDamageDelay()
+		return 0.03;
 	end
 
 
@@ -1324,8 +1326,8 @@ class "__HealthPrediction"
 	end
 
 	function __HealthPrediction:OnBasicAttack(sender)
-		local targetHandle = sender.attackData.target;
-		if targetHandle == nil or targetHandle <= 0 then
+		local target = sender.attackData.target;
+		if target == nil or target <= 0 then
 			return;
 		end
 		if Utilities:IsBaseTurret(sender) then -- fps drops
@@ -1342,7 +1344,7 @@ class "__HealthPrediction"
 				t[i].IsActiveAttack = false;
 			end
 		end
-		Linq:Add(self.IncomingAttacks[sender.networkID], __IncomingAttack(sender, targetHandle));
+		Linq:Add(self.IncomingAttacks[sender.networkID], __IncomingAttack(sender));
 	end
 
 	function __HealthPrediction:GetPrediction(target, time)
@@ -1361,11 +1363,11 @@ class "__HealthPrediction"
 	end
 
 class "__IncomingAttack"
-	function __IncomingAttack:__init(source, targetHandle)
+	function __IncomingAttack:__init(source)
 		self.Source = source;
-		self.TargetHandle = targetHandle;
+		self.TargetHandle = self.Source.attackData.target;
 		self.SourceIsValid = true;
-		self.boundingRadius = self.Source.boundingRadius
+		self.boundingRadius = 0;--self.Source.boundingRadius;
 		self.Arrived = false;
 		self.IsActiveAttack = true;
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
@@ -1387,11 +1389,11 @@ class "__IncomingAttack"
 		if self.SourceIsMelee then
 			return 0;
 		end
-		return ((Utilities:GetDistance(self.SourcePosition, target) --[[ - self.boundingRadius]]) / self.MissileSpeed);
+		return LocalMathMax(Utilities:GetDistance(self.SourcePosition, target, true) - self.boundingRadius, 0) / self.MissileSpeed;
 	end
 
 	function __IncomingAttack:GetArrivalTime(target)
-		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + 0.025;
+		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + Utilities:GetDamageDelay();
 	end
 
 	function __IncomingAttack:EqualsTarget(target)
@@ -1399,13 +1401,13 @@ class "__IncomingAttack"
 	end
 
 	function __IncomingAttack:ShouldRemove()
-		return self.Source == nil or self.Source.dead or LocalGameTimer() - self.StartTime > 3 or self.Arrived;
+		return self.Source == nil or self.Source.dead or LocalGameTimer() - self.StartTime > 3;-- or self.Arrived;
 	end
 
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() - 0.012;
+			delay = delay + Utilities:GetLatency() - 0.1;
 			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
 			if timeTillHit < 0 then
 				self.Arrived = true;
@@ -1902,6 +1904,7 @@ class "__Orbwalker"
 		self.MyHeroCanMove = true;
 		self.MyHeroCanAttack = true;
 
+		self.MyHeroAttacks = {};
 
 		self.FastKiting = false;
 
@@ -2176,7 +2179,16 @@ class "__Orbwalker"
 		local state = self:GetState();
 		if state == STATE_WINDUP and self.MyHeroState ~= STATE_WINDUP then
 			self.FastKiting = true;
+			--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
 		end
+		--[[
+			for i = 1, #self.MyHeroAttacks do
+				if self.MyHeroAttacks[i]:ShouldRemove() then
+					table.remove(self.MyHeroAttacks, i);
+					break;
+				end
+			end
+		]]
 		self.MyHeroState = state;
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		self.MyHeroCanMove = self:CanMove();
@@ -2188,8 +2200,8 @@ class "__Orbwalker"
 			end
 		end
 		if LocalGameTimer() - self.LastHoldPosition > 0.025 and self.LastHoldPosition > 0 then
-				LocalControlKeyUp(72);
-				self.LastHoldPosition = 0;
+			LocalControlKeyUp(72);
+			self.LastHoldPosition = 0;
 		end
 		if (not self.IsNone) then
 			self:Orbwalk();
@@ -2304,12 +2316,39 @@ class "__Orbwalker"
 			end
 		end
 		--[[
+		local minions = {};
+		local t = ObjectManager:GetEnemyHeroes();
+		for i = 1, #t do
+			local minion = t[i];
+			minions[minion.handle] = minion;
+		end
+		local t = ObjectManager:GetEnemyMinions();
+		for i = 1, #t do
+			local minion = t[i];
+			minions[minion.handle] = minion;
+		end
+		local t = ObjectManager:GetMonsters();
+		for i = 1, #t do
+			local minion = t[i];
+			minions[minion.handle] = minion;
+		end
+		local counter = 0;
+		for i = 1, #self.MyHeroAttacks do
+			local attack = self.MyHeroAttacks[i];
+			local position = myHero.pos:To2D();
+			position.y = position.y + counter * 18;
+			if minions[attack.TargetHandle] ~= nil then
+				local time = attack:GetArrivalTime(minions[attack.TargetHandle]) - LocalGameTimer();
+				LocalDrawText(tostring(time), position);
+			end
+			counter = counter + 1;
+		end
 		local stateTable = {};
 		stateTable[STATE_UNKNOWN] 	= "STATE_UNKNOWN";
 		stateTable[STATE_ATTACK]	= "STATE_ATTACK";
 		stateTable[STATE_WINDUP] 	= "STATE_WINDUP";
 		stateTable[STATE_WINDDOWN] 	= "STATE_WINDDOWN";
-		LocalDrawText(tostring(self:CanAttackTime()) .. " " .. tostring(self:CanIssueOrder()) .. " " .. tostring(stateTable[self:GetState()]), myHero.pos:To2D());
+		--LocalDrawText(tostring(self:CanAttackTime()) .. " " .. tostring(self:CanIssueOrder()) .. " " .. tostring(stateTable[self:GetState()]), myHero.pos:To2D());
 		local tempLastMinionHealth = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		for i = 1, #EnemyMinionsInRange do
@@ -2405,7 +2444,7 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= self:IssueOrderDelay() then
+			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetIssueOrderDelay() then
 				local state = self:GetState(unit);
 				if state == STATE_WINDUP or state == STATE_WINDDOWN then
 					return false;
@@ -2415,12 +2454,12 @@ class "__Orbwalker"
 		return self:CanIssueOrder(unit);
 	end
 
-	function __Orbwalker:IssueOrderDelay()
+	function __Orbwalker:GetIssueOrderDelay()
 		return Utilities:GetLatency() + 0.15;
 	end
 
 	function __Orbwalker:CanAttackTime()
-		return LocalGameTimer() - self:GetEndTime(unit) + self:IssueOrderDelay();
+		return LocalGameTimer() - self:GetEndTime(unit) + self:GetIssueOrderDelay();
 	end
 
 	function __Orbwalker:CanIssueOrder(unit)
@@ -2675,14 +2714,16 @@ class "__Orbwalker"
 		local Minions = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		local ExtraFarmDelay = self.Menu.Farming.ExtraFarmDelay:Value() * 0.001;
+		local DamageDelay = Utilities:GetDamageDelay();
+		local boundingRadius = 0;--myHero.boundingRadius;
 		for i = 1, #EnemyMinionsInRange do
 			local minion = EnemyMinionsInRange[i];
 			if Utilities:IsInRange(myHero, minion, 1500) then
-				local windUpTime = self:GetWindUpTime(myHero, minion) + ExtraFarmDelay;
-				local missileTravelTime = self.MyHeroIsMelee and 0 or ((Utilities:GetDistance(myHero, minion) --[[ - myHero.boundingRadius]]) / self:GetMissileSpeed());
+				local windUpTime = self:GetWindUpTime(myHero, minion) + DamageDelay + ExtraFarmDelay;
+				local missileTravelTime = self.MyHeroIsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
 				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
-				orbwalkerMinion.LaneClearTime = self:GetAnimationTime(myHero, minion) + windUpTime + maxMissileTravelTime;
+				orbwalkerMinion.LaneClearTime = windUpTime + self:GetAnimationTime(myHero, minion) + maxMissileTravelTime;
 				Minions[minion.handle] = orbwalkerMinion;
 			end
 		end
@@ -2900,6 +2941,8 @@ _G.SDK.Orbwalker = Orbwalker;
 if _G.Orbwalker then
 	_G.Orbwalker.Enabled:Value(false);
 	_G.Orbwalker.Drawings.Enabled:Value(false);
+	_G.Orbwalker:Remove();
+	_G.Orbwalker = nil;
 end
 
 AddLoadCallback(function()
