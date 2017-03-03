@@ -2833,7 +2833,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnPreMovement(cb)
-		Linq:Add(self.OnPreMovement, cb);
+		Linq:Add(self.OnPreMovementCallbacks, cb);
 	end
 
 class "__OrbwalkerMinion"
