@@ -59,6 +59,8 @@ local LocalCallbackDel				= Callback.Del;
 local LocalDrawColor				= Draw.Color;
 local LocalDrawCircle				= Draw.Circle;
 local LocalDrawText					= Draw.Text;
+local LocalControlMouseEvent		= Control.mouse_event;
+local LocalControlSetCursorPos		= Control.SetCursorPos;
 local LocalControlKeyUp				= Control.KeyUp;
 local LocalControlKeyDown			= Control.KeyDown;
 local LocalGameLatency				= Game.Latency;
@@ -204,8 +206,6 @@ AddLoadCallback(function()
 		end
 	end);
 end);
-
-]]
 class "__ClickBlocker"
 	function __ClickBlocker:__init()
 		local CLICK_TYPE_CASTSPELL 			= 1;
@@ -247,6 +247,93 @@ class "__ClickBlocker"
 
 --__ClickBlocker();
 
+local CONTROL_TYPE_ATTACK			= 1;
+local CONTROL_TYPE_MOVE				= 2;
+local CONTROL_TYPE_CASTSPELL		= 2;
+
+local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
+local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
+local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
+local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
+local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
+
+local ControlOrder = nil;
+
+local ControlAttackTable = {};
+
+ControlAttackTable = {
+	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
+		if LocalControlSetCursorPos(ControlOrder.TargetPosition) then
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
+		else
+
+		end
+		--LocalControlSetCursorPos(ControlOrder.TargetPosition);
+		--ControlAttackTable[ControlOrder.NextStep]();
+	end,
+	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
+		if _G.mousePos:DistanceTo(ControlOrder.TargetPosition) < 10 then
+			if LocalControlMouseEvent(0x0008) then
+				ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+				--ControlAttackTable[ControlOrder.NextStep]();
+			end
+		else
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION;
+			ControlAttackTable[ControlOrder.NextStep]();
+		end
+	end,
+	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
+		if LocalControlMouseEvent(0x0010) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+			--ControlAttackTable[ControlOrder.NextStep]();
+		end
+	end,
+	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
+		--ControlOrder = nil;
+		--ControlAttackTable[ControlOrder.NextStep]();
+	end,
+	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
+		if Utilities:GetDistance2DSquared(_G.cursorPos, ControlOrder.MousePosition) < 100 then
+			ControlOrder = nil;
+		else
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+			ControlAttackTable[ControlOrder.NextStep]();
+		end
+	end,
+};
+
+local ControlTypeTable = {
+	[CONTROL_TYPE_ATTACK] = function()
+		ControlAttackTable[ControlOrder.NextStep]();
+	end,
+}
+
+LocalCallbackAdd('Tick', function()
+	--print(tostring(_G.mousePos:To2D().x) .. " " .. tostring(_G.mousePos:To2D().y) .. " " .. tostring(_G.mousePos:To2D().z));
+	if ControlOrder ~= nil then
+		ControlTypeTable[ControlOrder.Type]();
+	end
+end);
+
+
+_G.Control.Attack = function(target)
+	local isNil = ControlOrder == nil;
+	if isNil then
+		ControlOrder = {
+			Type = CONTROL_TYPE_ATTACK;
+			TargetPosition = target.pos,
+			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
+			MousePosition = _G.cursorPos,
+		};
+		ControlTypeTable[ControlOrder.Type]();
+	end
+	return isNil;
+end
+
+]]
 class "__BuffManager"
 	function __BuffManager:__init()
 		self.CachedBuffStacks = {};
@@ -400,7 +487,7 @@ class "__Damage"
 				end
 			end,
 			["TwistedFate"] = function(args)
-				if BuffManager:HasBuff(args.From, "CardMasterStackParticle") then
+				if BuffManager:HasBuff(args.From, "cardmasterstackparticle") then
 					args.RawMagical = args.RawMagical + 30 + 25 * Utilities:GetSpellLevel(args.From, _E) + 0.5 * args.From.ap;
 				end
 				if BuffManager:HasBuff(args.From, "BlueCardPreAttack") then
@@ -907,6 +994,13 @@ class "__Utilities"
 		return a.networkID == b.networkID;
 	end
 
+	function __Utilities:GetDistance2DSquared(a, b)
+		local x = (a.x - b.x);
+		local y = (a.y - b.y);
+		return x * x + y * y;
+	end
+
+
 	function __Utilities:GetDistanceSquared(a, b, includeY)
 		local aIsGameObject = a.pos ~= nil;
 		local bIsGameObject = b.pos ~= nil;
@@ -971,8 +1065,13 @@ class "__Utilities"
 	end
 
 	function __Utilities:__IsValidTarget(target)
-		if self:IsObj_AI_Base(target) and not target.valid then
-			return false;
+		if self:IsObj_AI_Base(target) then
+			if not target.valid then
+				return false;
+			end
+			if target.isImmortal then
+				return false;
+			end
 		end
 		if target.dead or (not target.visible) or (not target.isTargetable) then
 			return false;
@@ -1018,10 +1117,6 @@ class "__Utilities"
 		return false;
 	end
 
-	function __Utilities:GetClickDelay()
-		return 0.06;
-	end
-
 	function __Utilities:GetHotKeyFromSlot(slot)
 		if self.SlotToHotKeys[slot] ~= nil then
 			return self.SlotToHotKeys[slot]();
@@ -1048,6 +1143,32 @@ class "__Utilities"
 		return 0.03;
 	end
 
+	function __Utilities:IsWindingUp(unit)
+		return unit.activeSpell.valid;
+	end
+
+	function __Utilities:IsAutoAttack(name)
+		return name:lower():find("basicattack");
+	end
+
+
+	function __Utilities:IsAutoAttacking(unit)
+		if self:IsWindingUp(unit) then
+			return unit.activeSpell.target > 0 and self:IsAutoAttack(unit.activeSpell.name);
+		end
+		return false;
+	end
+
+	function __Utilities:IsCastingSpell(unit)
+		if self:IsWindingUp(unit) then
+			return not self:IsAutoAttacking(unit);
+		end
+		return false;
+	end
+
+	function __Utilities:GetSpellWindUpTime(unit)
+		return unit.activeSpell.windup;
+	end
 
 class "__Linq"
 	function __Linq:__init()
@@ -1880,6 +2001,10 @@ class "__Orbwalker"
 	function __Orbwalker:__init()
 		self.Menu = MenuElement({ id = "IC's Orbwalker", name = "IC's Orbwalker", type = MENU });
 
+		self.HealthPrediction = nil;
+
+		self.Loaded = false;
+
 		self.DamageOnMinions = {};
 		self.LastHitMinion = nil;
 		self.AlmostLastHitMinion = nil;
@@ -1939,6 +2064,9 @@ class "__Orbwalker"
 		self.ExtraWindUpTimes = {
 			--["Jinx"] = 0.15,
 			--["Rengar"] = 0.15,
+		};
+		self.DisableSpellWindUpTime = {
+			["Kalista"] = true,
 		};
 		self.AllowMovement = {
 			["Lucian"] = function(unit)
@@ -2160,6 +2288,8 @@ class "__Orbwalker"
 		LocalCallbackAdd('Draw', function()
 			self:OnDraw();
 		end);
+
+		self.Loaded = true;
 	end
 
 	function __Orbwalker:Clear()
@@ -2429,7 +2559,11 @@ class "__Orbwalker"
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
-		if LocalGameTimer() - (self:GetEndTime(unit) + ExtraWindUpTime - self:GetWindDownTime(unit)) >= 0 then
+		local endTime = self:GetEndTime(unit) - self:GetWindDownTime(unit) + ExtraWindUpTime;
+		if not self.DisableSpellWindUpTime[unit.charName] and Utilities:IsAutoAttacking(unit) then
+			endTime = self:GetEndTime(unit) - self:GetAnimationTime(unit) + Utilities:GetSpellWindUpTime(unit);
+		end
+		if LocalGameTimer() - endTime + self:GetIssueOrderDelay() >= 0 then
 			return true;
 		end
 		return false;
