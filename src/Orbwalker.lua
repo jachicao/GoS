@@ -2563,7 +2563,7 @@ class "__Orbwalker"
 		if not self.DisableSpellWindUpTime[unit.charName] and Utilities:IsAutoAttacking(unit) then
 			endTime = self:GetEndTime(unit) - self:GetAnimationTime(unit) + Utilities:GetSpellWindUpTime(unit);
 		end
-		if LocalGameTimer() - endTime + self:GetIssueOrderDelay() >= 0 then
+		if LocalGameTimer() - endTime + 0.03 >= 0 then
 			return true;
 		end
 		return false;
