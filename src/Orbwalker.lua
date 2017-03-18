@@ -26,6 +26,8 @@ end
         :ShouldWait() -- returns a boolean
         :OnPreAttack(function({ Process: boolean, Target: unit }) end) -- Suscribe to event
         :OnPreMovement(function({ Process: boolean, Target: Vector }) end) -- Suscribe to event
+        :OnAttack(function() end) -- Suscribe to event
+        :OnPostAttack(function() end) -- Suscribe to event
         :RegisterMenuKey(mode: enum, key: menu) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo); Only needed for extra keys
 
     _G.SDK.TargetSelector
@@ -1863,7 +1865,7 @@ class "__TargetSelector"
 					self.Menu.Priorities:MenuElement({ id = hero.charName, name = hero.charName, value = priority, min = 1, max = 5, step = 1 });
 				end
 			end
-			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = true, callback = function()
+			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = false, callback = function()
 				if self.Menu.Priorities.Reset:Value() then
 					for charName, _ in pairs(self.EnemiesAdded) do
 						local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
