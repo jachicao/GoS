@@ -1999,7 +1999,7 @@ local ORBWALKER_TARGET_TYPE_STRUCTURE		= 4;
 
 class "__Orbwalker"
 	function __Orbwalker:__init()
-		self.Menu = MenuElement({ id = "IC's Orbwalker", name = "IC's Orbwalker", type = MENU });
+		self.Menu = MenuElement({ id = "IC's Orbwalker 2", name = "IC's Orbwalker", type = MENU });
 
 		self.HealthPrediction = nil;
 
@@ -2020,6 +2020,7 @@ class "__Orbwalker"
 		self.LastShouldWait = 0;
 		self.ForceTarget = nil;
 		self.ForceMovement = nil;
+		self.MyHeroIsAutoAttacking = false;
 
 		self.IsNone = false;
 		self.OnlyLastHit = false;
@@ -2054,6 +2055,8 @@ class "__Orbwalker"
 		self.OnUnkillableMinionCallbacks = {};
 		self.OnPreAttackCallbacks = {};
 		self.OnPreMovementCallbacks = {};
+		self.OnAttackCallbacks = {};
+		self.OnPostAttackCallbacks = {};
 
 		self.HoldPosition = nil;
 		self.LastHoldPosition = 0;
@@ -2062,8 +2065,7 @@ class "__Orbwalker"
 		self.LastMinionDraw = {};
 
 		self.ExtraWindUpTimes = {
-			--["Jinx"] = 0.15,
-			--["Rengar"] = 0.15,
+
 		};
 		self.DisableSpellWindUpTime = {
 			["Kalista"] = true,
@@ -2108,7 +2110,7 @@ class "__Orbwalker"
 		self.SpecialWindUpTimes = {
 			["TwistedFate"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "BlueCardPreAttack") or BuffManager:HasBuff(unit, "RedCardPreAttack") or BuffManager:HasBuff(unit, "GoldCardPreAttack") then
-					return 0.13;
+					return 0.125;
 				end
 				return nil;
 			end,
@@ -2268,7 +2270,7 @@ class "__Orbwalker"
 			self.Menu.General:MenuElement({ id = "MovementDelay", name = "Movement Delay", value = 250, min = 0, max = 1000, step = 25 });
 			self.Menu.General:MenuElement({ id = "SupportMode." .. myHero.charName, name = "Support Mode", value = self.SupportHeroes[myHero.charName] ~= nil });
 			self.Menu.General:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = 120, min = 100, max = 250, step = 10 });
-			self.Menu.General:MenuElement({ id = "ExtraWindUpTime", name = "Extra WindUpTime", value = 40, min = 0, max = 200, step = 20 });
+			self.Menu.General:MenuElement({ id = "ExtraWindUpTime", name = "Extra WindUpTime", value = 0, min = 0, max = 200, step = 20 });
 
 		self.Menu:MenuElement({ id = "Farming", name = "Farming Settings", type = MENU });
 			self.Menu.Farming:MenuElement({ id = "LastHitPriority", name = "Priorize Last Hit over Harass", value = true });
@@ -2307,10 +2309,21 @@ class "__Orbwalker"
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
 		local state = self:GetState();
-		if state == STATE_WINDUP and self.MyHeroState ~= STATE_WINDUP then
-			self.FastKiting = true;
-			--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
+		if state == STATE_WINDUP then
+			if self.MyHeroState ~= STATE_WINDUP then
+				self:__OnAttack();
+				--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
+			end
 		end
+		self.MyHeroState = state;
+
+		local IsAutoAttacking = self:IsAutoAttacking();
+		if not IsAutoAttacking then
+			if self.MyHeroIsAutoAttacking then
+				self:__OnPostAttack();
+			end
+		end
+		self.MyHeroIsAutoAttacking = IsAutoAttacking;
 		--[[
 			for i = 1, #self.MyHeroAttacks do
 				if self.MyHeroAttacks[i]:ShouldRemove() then
@@ -2319,10 +2332,11 @@ class "__Orbwalker"
 				end
 			end
 		]]
-		self.MyHeroState = state;
+
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
 		self.MyHeroCanMove = self:CanMove();
 		self.MyHeroCanAttack = self:CanAttack();
+
 		if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
 			self.OnlyLastHit = (not self.Modes[ORBWALKER_MODE_LANECLEAR]);
 			if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
@@ -2335,6 +2349,19 @@ class "__Orbwalker"
 		end
 		if (not self.IsNone) then
 			self:Orbwalk();
+		end
+	end
+
+	function __Orbwalker:__OnAttack()
+		self.FastKiting = true;
+		for i = 1, #self.OnAttackCallbacks do
+			self.OnAttackCallbacks[i]();
+		end
+	end
+
+	function __Orbwalker:__OnPostAttack()
+		for i = 1, #self.OnPostAttackCallbacks do
+			self.OnPostAttackCallbacks[i]();
 		end
 	end
 
@@ -2527,13 +2554,42 @@ class "__Orbwalker"
 	function __Orbwalker:GetUnit(unit)
 		return (unit ~= nil) and unit or myHero;
 	end
+
+	function __Orbwalker:GetMaximumIssueOrderDelay()
+		return 0.15 + Utilities:GetLatency();
+	end
+
+	function __Orbwalker:IsAutoAttacking(unit)
+		unit = self:GetUnit(unit);
+		local state = self:GetState(unit);
+		--[[
+			if state == STATE_WINDDOWN then
+				return true;
+			end
+		]]
+		if state == STATE_ATTACK then
+			return false;
+		end
+		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
+		if self.ExtraWindUpTimes[unit.charName] ~= nil then
+			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
+		end
+		local endTime = self:GetEndTime(unit) - self:GetWindDownTime(unit) + ExtraWindUpTime;
+		if not self.DisableSpellWindUpTime[unit.charName] and Utilities:IsAutoAttacking(unit) then
+			endTime = self:GetEndTime(unit) - self:GetAnimationTime(unit) + Utilities:GetSpellWindUpTime(unit) + ExtraWindUpTime;
+		end
+		if LocalGameTimer() - endTime + 0.03 >= 0 then
+			return false;
+		end
+		return true;
+	end
 	
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= 0.15 + Utilities:GetLatency() then
+			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
 				if state == STATE_ATTACK then
-					return false;
+					return true;
 				end
 			end
 		end
@@ -2546,27 +2602,7 @@ class "__Orbwalker"
 				end
 			end
 		end
-		local state = self:GetState(unit);
-		--[[
-			if state == STATE_WINDDOWN then
-				return true;
-			end
-		]]
-		if state == STATE_ATTACK then
-			return true;
-		end
-		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
-		if self.ExtraWindUpTimes[unit.charName] ~= nil then
-			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
-		end
-		local endTime = self:GetEndTime(unit) - self:GetWindDownTime(unit) + ExtraWindUpTime;
-		if not self.DisableSpellWindUpTime[unit.charName] and Utilities:IsAutoAttacking(unit) then
-			endTime = self:GetEndTime(unit) - self:GetAnimationTime(unit) + Utilities:GetSpellWindUpTime(unit);
-		end
-		if LocalGameTimer() - endTime + 0.03 >= 0 then
-			return true;
-		end
-		return false;
+		return not self:IsAutoAttacking(unit);
 	end
 
 	function __Orbwalker:CanAttack(unit)
@@ -2578,7 +2614,7 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetIssueOrderDelay() then
+			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
 				local state = self:GetState(unit);
 				if state == STATE_WINDUP or state == STATE_WINDDOWN then
 					return false;
@@ -2589,7 +2625,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetIssueOrderDelay()
-		return Utilities:GetLatency() + 0.15;
+		return Utilities:GetLatency() + 0.04;
 	end
 
 	function __Orbwalker:CanAttackTime()
@@ -2969,6 +3005,15 @@ class "__Orbwalker"
 	function __Orbwalker:OnPreMovement(cb)
 		Linq:Add(self.OnPreMovementCallbacks, cb);
 	end
+
+	function __Orbwalker:OnAttack(cb)
+		Linq:Add(self.OnAttackCallbacks, cb);
+	end
+
+	function __Orbwalker:OnPostAttack(cb)
+		Linq:Add(self.OnPostAttackCallbacks, cb);
+	end
+
 
 class "__OrbwalkerMinion"
 	function __OrbwalkerMinion:__init(minion)
