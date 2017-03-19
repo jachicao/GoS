@@ -458,7 +458,7 @@ class "__Damage"
 			["Draven"] = function(args)
 				if BuffManager:HasBuff(args.From, "DravenSpinningAttack") then
 					local level = Utilities:GetSpellLevel(args.From, _Q);
-					args.RawPhysical = args.RawPhysical + (35 + 10 * level) * 0.01 * args.From.totalDamage; 
+					args.RawPhysical = args.RawPhysical + 25 + 5 * level + (0.55 + 0.1 * level) * args.From.bonusDamage; 
 				end
 
 			end,
@@ -510,6 +510,12 @@ class "__Damage"
 					args.RawMagical = args.RawMagical + 7.5 + 7.5 * Utilities:GetSpellLevel(args.From, _W) + 0.5 * args.From.ap;
 				end
 			end,
+			["Varus"] = function(args)
+				local level = Utilities:GetSpellLevel(args.From, _W);
+				if level > 0 then
+					args.RawMagical = args.RawMagical + 6 + 4 * level + 0.25 * args.From.ap;
+				end
+			end,
 			["Vayne"] = function(args)
 				if BuffManager:HasBuff(args.From, "vaynetumblebonus") then
 					args.RawPhysical = args.RawPhysical + (0.25 + 0.05 * Utilities:GetSpellLevel(args.From, _Q)) * args.From.totalDamage;
@@ -517,6 +523,13 @@ class "__Damage"
 			end,
 		};
 		self.VariableChampionDamageDatabase = {
+			["Orianna"] = function(args)
+				local level = LocalMathCeil(Utilities:GetLevel(args.From) / 3);
+				args.RawMagical = args.RawMagical + 2 + 8 * level + 0.15 * args.From.ap;
+				if args.Target.handle == Utilities:GetAttackDataTarget(args.From) then
+					args.RawMagical = args.RawMagical + LocalMathMax(BuffManager:GetBuffCount(args.From, "orianapowerdaggerdisplay"), 0) * (0.4 + 1.6 * level + 0.03 * args.From.ap);
+				end
+			end,
 			["Vayne"] = function(args)
 				if BuffManager:GetBuffCount(args.Target, "VayneSilveredDebuff") == 2 then
 					local level = Utilities:GetSpellLevel(args.From, _W);
@@ -524,7 +537,7 @@ class "__Damage"
 				end
 			end,
 			["Zed"] = function(args)
-				if Utilities:GetHealthPercent(args.Target) <= 50 and not BuffManager:HasBuff("zedpassivecd") then
+				if Utilities:GetHealthPercent(args.Target) <= 50 and not BuffManager:HasBuff(args.From, "zedpassivecd") then
 					args.RawMagical = args.RawMagical + args.Target.maxHealth * (4 + 2 * LocalMathCeil(Utilities:GetLevel(args.From) / 6)) * 0.01;
 				end
 			end,
@@ -908,10 +921,16 @@ class "__Utilities"
 					return 2000;
 				end
 				return nil;
-			end,	
+			end,
 			["Poppy"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "poppypassivebuff") then
 					return 1600;
+				end
+				return nil;
+			end,
+			["Twitch"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "TwitchFullAutomatic") then
+					return 4000;
 				end
 				return nil;
 			end,
