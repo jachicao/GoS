@@ -1492,13 +1492,14 @@ class "__IncomingAttack"
 		self.SourceIsValid = true;
 		self.boundingRadius = 0;--self.Source.boundingRadius;
 		self.Arrived = false;
+		self.Invalid = false;
 		self.IsActiveAttack = true;
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
 		self.MissileSpeed = self.SourceIsMelee and LocalMathHuge or self.Source.attackData.projectileSpeed;
 		self.SourcePosition = self.Source.pos;
 		self.WindUpTime = self.Source.attackData.windUpTime;
 		self.AnimationTime = self.Source.attackData.animationTime;
-		self.StartTime = self.Source.attackData.endTime - self.Source.attackData.animationTime;--LocalGameTimer();
+		self.StartTime = self.Source.attackData.endTime - self.AnimationTime;--LocalGameTimer();
 	end
 
 	function __IncomingAttack:GetAutoAttackDamage(target)
@@ -1519,44 +1520,64 @@ class "__IncomingAttack"
 		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + Utilities:GetDamageDelay();
 	end
 
+	function __IncomingAttack:GetMissileCreationTime()
+		return self.StartTime + self.WindUpTime;
+	end
+
 	function __IncomingAttack:EqualsTarget(target)
 		return target.handle == self.TargetHandle;
 	end
 
 	function __IncomingAttack:ShouldRemove()
-		return self.Source == nil or self.Source.dead or LocalGameTimer() - self.StartTime > 3;-- or self.Arrived;
+		return self.Invalid or LocalGameTimer() - self.StartTime > 3;-- or self.Arrived;
 	end
 
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
 			delay = delay + Utilities:GetLatency() - 0.1;
-			local timeTillHit = self:GetArrivalTime(target) - LocalGameTimer();
+			local CurrentTime = LocalGameTimer();
+			local timeTillHit = self:GetArrivalTime(target) - CurrentTime;
 			if timeTillHit < 0 then
 				self.Arrived = true;
 			end
 			if not self.Arrived then
-				if self.IsActiveAttack and Utilities:IsValidTarget(self.Source) then
-					local count = 0;
-					if addNextAutoAttacks then
-						while timeTillHit < delay do
-							if timeTillHit > 0 then
+				local count = 0;
+				local willHit = timeTillHit < delay and timeTillHit > 0;
+				if Utilities:IsValidTarget(self.Source) then
+					if self.IsActiveAttack then
+						if addNextAutoAttacks then
+							while timeTillHit < delay do
+								if timeTillHit > 0 then
+									count = count + 1;
+								end
+								timeTillHit = timeTillHit + self.AnimationTime;
+							end
+						else
+							if willHit then
 								count = count + 1;
 							end
-							timeTillHit = timeTillHit + self.AnimationTime;
 						end
 					else
-						if timeTillHit < delay and timeTillHit > 0 then
-							count = count + 1;
+						if not self.SourceIsMelee then
+							if willHit then
+								count = count + 1;
+							end
 						end
 					end
-					if count > 0 then
-						damage = damage + self:GetAutoAttackDamage(target) * count;
+				else
+					if not self.SourceIsMelee then
+						if CurrentTime >= self:GetMissileCreationTime() then
+							if willHit then
+								count = count + 1;
+							end
+						else
+							self.Invalid = true;
+						end
 					end
-				elseif timeTillHit < delay and timeTillHit > 0 then
-					if (not self.SourceIsMelee) or Utilities:IsValidTarget(self.Source) then
-						damage = damage + self:GetAutoAttackDamage(target);
-					end
+				end
+				if count > 0 then
+					damage = damage + self:GetAutoAttackDamage(target) * count;
 				end
 			end
 		end
