@@ -696,8 +696,8 @@ class "__Damage"
 			DamageType = DAMAGE_TYPE_PHYSICAL,
 			TargetIsMinion = targetIsMinion,
 		};
-		if self.StaticChampionDamageDatabase[from.charName] ~= nil then
-			self.StaticChampionDamageDatabase[from.charName](args);
+		if self.StaticChampionDamageDatabase[args.From.charName] ~= nil then
+			self.StaticChampionDamageDatabase[args.From.charName](args);
 		end
 
 		local HashSet = {};
@@ -735,8 +735,8 @@ class "__Damage"
 		end
 		local CriticalStrike = false;
 
-		if self.VariableChampionDamageDatabase[args.Target.charName] ~= nil then
-			self.VariableChampionDamageDatabase[args.Target.charName](args);
+		if self.VariableChampionDamageDatabase[args.From.charName] ~= nil then
+			self.VariableChampionDamageDatabase[args.From.charName](args);
 		end
 
 		if args.DamageType == DAMAGE_TYPE_PHYSICAL then
@@ -918,11 +918,16 @@ class "__Utilities"
 			[SUMMONER_2]	= function() return HK_SUMMONER_2 end,
 		};
 
-		self.MenuIsOpen = false;
+		self.DisableSpellWindUpTime = {
+			["Kalista"] = true,
+			["Thresh"] = true,
+		};
 
 		LocalCallbackAdd('Tick', function()
 			self.CachedValidTargets = {};
 		end);
+
+		self.MenuIsOpen = false;
 		--[[
 		LocalCallbackAdd('WndMsg', function(msg, wParam)
 			if wParam == 160 then
@@ -947,30 +952,30 @@ class "__Utilities"
 		return range;
 	end
 
-	function __Utilities:IsMelee(target)
-		if LocalMathAbs(target.attackData.projectileSpeed) < EPSILON then
+	function __Utilities:IsMelee(unit)
+		if LocalMathAbs(self:GetAttackDataProjectileSpeed(unit)) < EPSILON then
 			return true;
 		end
-		if self.SpecialMelees[target.charName] ~= nil then
-			return self.SpecialMelees[target.charName](target);
+		if self.SpecialMelees[unit.charName] ~= nil then
+			return self.SpecialMelees[unit.charName](unit);
 		end
-		if target.type == Obj_AI_Hero then
-			return target.range <= 275;
+		if unit.type == Obj_AI_Hero then
+			return unit.range <= 275;
 		else
 			return false;
 		end
 	end
 
-	function __Utilities:IsRanged(target)
-		return not self:IsMelee(target);
+	function __Utilities:IsRanged(unit)
+		return not self:IsMelee(unit);
 	end
 
-	function __Utilities:IsMonster(target)
-		return target.team == 300;
+	function __Utilities:IsMonster(unit)
+		return unit.team == 300;
 	end
 
-	function __Utilities:IsOtherMinion(target)
-		return target.maxHealth <= 6;
+	function __Utilities:IsOtherMinion(unit)
+		return unit.maxHealth <= 6;
 	end
 
 	function __Utilities:IsBaseTurret(turret)
@@ -1153,7 +1158,6 @@ class "__Utilities"
 		return name:lower():find("basicattack");
 	end
 
-
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
 			return unit.activeSpell.target > 0 and self:IsAutoAttack(unit.activeSpell.name);
@@ -1169,7 +1173,38 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetSpellWindUpTime(unit)
+		if self.DisableSpellWindUpTime[unit.charName] then
+			return self:GetAttackDataWindUpTime(unit);
+		end
 		return unit.activeSpell.windup;
+	end
+
+	function __Utilities:GetSpellAnimationTime(unit)
+		return unit.activeSpell.animation;
+	end
+
+	function __Utilities:GetAttackDataWindUpTime(unit)
+		return unit.attackData.windUpTime;
+	end
+
+	function __Utilities:GetAttackDataAnimationTime(unit)
+		return unit.attackData.animationTime;
+	end
+
+	function __Utilities:GetAttackDataEndTime(unit)
+		return unit.attackData.endTime;
+	end
+
+	function __Utilities:GetAttackDataState(unit)
+		return unit.attackData.state;
+	end
+
+	function __Utilities:GetAttackDataTarget(unit)
+		return unit.attackData.target;
+	end
+
+	function __Utilities:GetAttackDataProjectileSpeed(unit)
+		return unit.attackData.projectileSpeed;
 	end
 
 class "__Linq"
@@ -1393,8 +1428,8 @@ class "__HealthPrediction"
 		for i = 1, #t do
 			local minion = t[i];
 			self:CheckNewState(minion);
-			newAlliesState[minion.networkID] = minion.attackData.state;
-			local target = minion.attackData.target;
+			newAlliesState[minion.networkID] = Utilities:GetAttackDataState(minion);
+			local target = Utilities:GetAttackDataTarget(minion);
 			if target ~= nil and target > 0 then
 				newAlliesTarget[target] = true;
 			end
@@ -1403,8 +1438,8 @@ class "__HealthPrediction"
 		for i = 1, #t do
 			local turret = t[i];
 			self:CheckNewState(turret);
-			newAlliesState[turret.networkID] = turret.attackData.state;
-			local target = turret.attackData.target;
+			newAlliesState[turret.networkID] = Utilities:GetAttackDataState(turret);
+			local target = Utilities:GetAttackDataTarget(turret);
 			if target ~= nil and target > 0 then
 				newAlliesTarget[target] = true;
 			end
@@ -1434,12 +1469,12 @@ class "__HealthPrediction"
 		end
 	end
 
-	function __HealthPrediction:CheckNewState(target)
-		local currentState = target.attackData.state;
-		local prevState = self.AlliesState[target.networkID];
+	function __HealthPrediction:CheckNewState(unit)
+		local currentState = Utilities:GetAttackDataState(unit);
+		local prevState = self.AlliesState[unit.networkID];
 		if prevState ~= nil then
 			if prevState ~= STATE_WINDUP and currentState == STATE_WINDUP then
-				self:OnBasicAttack(target);
+				self:OnBasicAttack(unit);
 			end
 		end
 	end
@@ -1449,7 +1484,7 @@ class "__HealthPrediction"
 	end
 
 	function __HealthPrediction:OnBasicAttack(sender)
-		local target = sender.attackData.target;
+		local target = Utilities:GetAttackDataTarget(sender);
 		if target == nil or target <= 0 then
 			return;
 		end
@@ -1488,18 +1523,18 @@ class "__HealthPrediction"
 class "__IncomingAttack"
 	function __IncomingAttack:__init(source)
 		self.Source = source;
-		self.TargetHandle = self.Source.attackData.target;
+		self.TargetHandle = Utilities:GetAttackDataTarget(self.Source);
 		self.SourceIsValid = true;
 		self.boundingRadius = 0;--self.Source.boundingRadius;
 		self.Arrived = false;
 		self.Invalid = false;
 		self.IsActiveAttack = true;
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
-		self.MissileSpeed = self.SourceIsMelee and LocalMathHuge or self.Source.attackData.projectileSpeed;
+		self.MissileSpeed = self.SourceIsMelee and LocalMathHuge or Utilities:GetAttackDataProjectileSpeed(self.Source);
 		self.SourcePosition = self.Source.pos;
-		self.WindUpTime = self.Source.attackData.windUpTime;
-		self.AnimationTime = self.Source.attackData.animationTime;
-		self.StartTime = self.Source.attackData.endTime - self.AnimationTime;--LocalGameTimer();
+		self.WindUpTime = Utilities:GetAttackDataWindUpTime(self.Source);
+		self.AnimationTime = Utilities:GetAttackDataAnimationTime(self.Source);
+		self.StartTime = Utilities:GetAttackDataEndTime(self.Source) - self.AnimationTime;--LocalGameTimer();
 	end
 
 	function __IncomingAttack:GetAutoAttackDamage(target)
@@ -2032,8 +2067,6 @@ class "__Orbwalker"
 		self.LastHitMinion = nil;
 		self.AlmostLastHitMinion = nil;
 		self.LaneClearMinion = nil;
-		self.CustomMissileSpeed = nil;
-		self.CustomWindUpTime = nil;
 		self.StaticAutoAttackDamage = nil;
 
 		self.EnemyStructures = {};
@@ -2043,11 +2076,11 @@ class "__Orbwalker"
 		self.LastShouldWait = 0;
 		self.ForceTarget = nil;
 		self.ForceMovement = nil;
-		self.MyHeroIsAutoAttacking = false;
 
 		self.IsNone = false;
 		self.OnlyLastHit = false;
 
+		self.MyHeroIsAutoAttacking = false;
 		self.MyHeroState = STATE_ATTACK;
 		self.MyHeroIsMelee = true;
 		self.MyHeroCanMove = true;
@@ -2090,9 +2123,12 @@ class "__Orbwalker"
 		self.ExtraWindUpTimes = {
 
 		};
-		self.DisableSpellWindUpTime = {
-			["Kalista"] = true,
-		};
+
+		self.AttackDataWindUpTime = 0;
+		self.SpellWindUpTime = 0;
+		self.AttackDataAnimationTime = 0;
+		self.SpellAnimationTime = 0;
+
 		self.AllowMovement = {
 			["Lucian"] = function(unit)
 				return BuffManager:HasBuff(unit, "LucianR");
@@ -2149,6 +2185,12 @@ class "__Orbwalker"
 			["Jinx"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "JinxQ") then
 					return 2000;
+				end
+				return nil;
+			end,
+			["Poppy"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "poppypassivebuff") then
+					return 1600;
 				end
 				return nil;
 			end,
@@ -2322,8 +2364,6 @@ class "__Orbwalker"
 		self.LastHitMinion = nil;
 		self.AlmostLastHitMinion = nil;
 		self.LaneClearMinion = nil;
-		self.CustomMissileSpeed = nil;
-		self.CustomWindUpTime = nil;
 		self.StaticAutoAttackDamage = nil;
 	end
 
@@ -2331,7 +2371,7 @@ class "__Orbwalker"
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
-		local state = self:GetState();
+		local state = Utilities:GetAttackDataState(myHero);
 		if state == STATE_WINDUP then
 			if self.MyHeroState ~= STATE_WINDUP then
 				self:__OnAttack();
@@ -2528,7 +2568,7 @@ class "__Orbwalker"
 		stateTable[STATE_ATTACK]	= "STATE_ATTACK";
 		stateTable[STATE_WINDUP] 	= "STATE_WINDUP";
 		stateTable[STATE_WINDDOWN] 	= "STATE_WINDDOWN";
-		--LocalDrawText(tostring(self:CanAttackTime()) .. " " .. tostring(self:CanIssueOrder()) .. " " .. tostring(stateTable[self:GetState()]), myHero.pos:To2D());
+		--LocalDrawText(tostring(self:CanAttackTime()) .. " " .. tostring(self:CanIssueOrder()) .. " " .. tostring(stateTable[Utilities:GetAttackDataState(myHero)]), myHero.pos:To2D());
 		local tempLastMinionHealth = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		for i = 1, #EnemyMinionsInRange do
@@ -2578,41 +2618,30 @@ class "__Orbwalker"
 		return (unit ~= nil) and unit or myHero;
 	end
 
-	function __Orbwalker:GetMaximumIssueOrderDelay()
-		return 0.15 + Utilities:GetLatency();
-	end
-
 	function __Orbwalker:IsAutoAttacking(unit)
 		unit = self:GetUnit(unit);
-		local state = self:GetState(unit);
-		--[[
-			if state == STATE_WINDDOWN then
-				return true;
-			end
-		]]
-		if state == STATE_ATTACK then
-			return false;
-		end
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
-		local endTime = self:GetEndTime(unit) - self:GetWindDownTime(unit) + ExtraWindUpTime;
-		if not self.DisableSpellWindUpTime[unit.charName] and Utilities:IsAutoAttacking(unit) then
-			endTime = self:GetEndTime(unit) - self:GetAnimationTime(unit) + Utilities:GetSpellWindUpTime(unit) + ExtraWindUpTime;
-		end
+		local endTime = Utilities:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
 		if LocalGameTimer() - endTime + 0.03 >= 0 then
 			return false;
 		end
 		return true;
 	end
+
+	function __Orbwalker:GetMaximumIssueOrderDelay()
+		return 0.15 + Utilities:GetLatency();
+	end
 	
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
+		local IsAutoAttacking = self:IsAutoAttacking(unit);
 		if unit.isMe then
 			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
-				if state == STATE_ATTACK then
-					return true;
+				if not IsAutoAttacking then
+					return false;
 				end
 			end
 		end
@@ -2625,7 +2654,7 @@ class "__Orbwalker"
 				end
 			end
 		end
-		return not self:IsAutoAttacking(unit);
+		return not IsAutoAttacking;
 	end
 
 	function __Orbwalker:CanAttack(unit)
@@ -2637,9 +2666,9 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
+			local IsAutoAttacking = self:IsAutoAttacking(unit);
 			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
-				local state = self:GetState(unit);
-				if state == STATE_WINDUP or state == STATE_WINDDOWN then
+				if not IsAutoAttacking then
 					return false;
 				end
 			end
@@ -2648,95 +2677,78 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetIssueOrderDelay()
-		return Utilities:GetLatency() + 0.04;
+		return Utilities:GetLatency() + 0.08;
 	end
 
-	function __Orbwalker:CanAttackTime()
-		return LocalGameTimer() - self:GetEndTime(unit) + self:GetIssueOrderDelay();
+	function __Orbwalker:CanAttackTime(unit)
+		unit = self:GetUnit(unit);
+		return LocalGameTimer() - Utilities:GetAttackDataEndTime(unit) + self:GetIssueOrderDelay();
 	end
 
 	function __Orbwalker:CanIssueOrder(unit)
 		unit = self:GetUnit(unit);
-		if self:GetState(unit) == STATE_ATTACK then
-			return true;
-		end
-		return self:CanAttackTime() >= 0;
-	end
-
-	function __Orbwalker:GetState(unit)
-		unit = self:GetUnit(unit);
-		return unit.attackData.state;
-	end
-
-	function __Orbwalker:GetWindDownTime(unit)
-		unit = self:GetUnit(unit);
-		return self:GetAnimationTime(unit) - self:GetWindUpTime(unit);
-		--return unit.attackData.windDownTime;
-	end
-
-	function __Orbwalker:GetAnimationTime(unit, target)
-		unit = self:GetUnit(unit);
-		if unit.charName == "Azir" then
-			--TODO
-		end
-		return unit.attackData.animationTime;
-	end
-
-	function __Orbwalker:GetEndTime(unit)
-		unit = self:GetUnit(unit);
-		return unit.attackData.endTime;
+		return self:CanAttackTime(unit) >= 0;
 	end
 
 	function __Orbwalker:GetWindUpTime(unit, target)
 		unit = self:GetUnit(unit);
-		if self.SpecialWindUpTimes[unit.charName] ~= nil then
+		local windUpTime = Utilities:GetAttackDataWindUpTime(unit);
+		if Utilities:IsAutoAttacking(unit) then
+			local SpellWindUpTime = Utilities:GetSpellWindUpTime(unit);
 			if unit.isMe then
-				if self.CustomWindUpTime == nil then
-					local windUpTime = self.SpecialWindUpTimes[unit.charName](unit);
-					if windUpTime then
-						self.CustomWindUpTime = windUpTime;
-					else
-						self.CustomWindUpTime = unit.attackData.windUpTime;
-					end
-				end
-				return self.CustomWindUpTime;
-			else
-				local windUpTime = self.SpecialWindUpTimes[unit.charName](unit);
-				if windUpTime then
-					return windUpTime;
-				end
+				self.AttackDataWindUpTime = windUpTime;
+				self.SpellWindUpTime = SpellWindUpTime;
 			end
+			return SpellWindUpTime;
+		end
+		if self.SpecialWindUpTimes[unit.charName] ~= nil then
+			local SpecialWindUpTime = self.SpecialWindUpTimes[unit.charName](unit);
+			if SpecialWindUpTime then
+				return SpecialWindUpTime;
+			end
+		end
+		if LocalMathAbs(self.AttackDataWindUpTime - windUpTime) < EPSILON then
+			return self.SpellWindUpTime;
 		end
 		if unit.charName == "Azir" then
 			--TODO
 		end
-		return unit.attackData.windUpTime;
+		return windUpTime;
 	end
+
+	function __Orbwalker:GetAnimationTime(unit, target)
+		unit = self:GetUnit(unit);
+		local animationTime = Utilities:GetAttackDataAnimationTime(unit);
+		if Utilities:IsAutoAttacking(unit) then
+			local SpellAnimationTime = Utilities:GetSpellAnimationTime(unit);
+			if unit.isMe then
+				self.AttackDataAnimationTime = animationTime;
+				self.SpellAnimationTime = SpellAnimationTime;
+			end
+			return SpellAnimationTime;
+		end
+		if LocalMathAbs(self.AttackDataAnimationTime - animationTime) < EPSILON then
+			return self.SpellAnimationTime;
+		end
+		if unit.charName == "Azir" then
+			--TODO
+		end
+		return animationTime;
+	end
+
 
 	function __Orbwalker:GetMissileSpeed(unit)
 		unit = self:GetUnit(unit);
 		if self.SpecialMissileSpeeds[unit.charName] ~= nil then
-			if unit.isMe then
-				if self.CustomMissileSpeed == nil then
-					local projectileSpeed = self.SpecialMissileSpeeds[unit.charName](unit);
-					if projectileSpeed then
-						self.CustomMissileSpeed = projectileSpeed;
-					else
-						self.CustomMissileSpeed = unit.attackData.projectileSpeed;
-					end
-				end
-				return self.CustomMissileSpeed;
-			else
-				local projectileSpeed = self.SpecialMissileSpeeds[unit.charName](unit);
-				if projectileSpeed then
-					return projectileSpeed;
-				end
+			local projectileSpeed = self.SpecialMissileSpeeds[unit.charName](unit);
+			if projectileSpeed then
+				return projectileSpeed;
 			end
 		end
 		if Utilities:IsMelee(unit) then
 			return LocalMathHuge;
 		end
-		return unit.attackData.projectileSpeed;
+		return Utilities:GetAttackDataProjectileSpeed(unit);
 	end
 
 	function __Orbwalker:GetTarget()
@@ -2902,7 +2914,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CalculateLastHittableMinions()
-		local extraTime = 0;--TODO (not self:CanIssueOrder()) and LocalMathMax(0, self:GetEndTime() - LocalGameTimer()) or 0;
+		local extraTime = 0;--TODO (not self:CanIssueOrder()) and LocalMathMax(0, Utilities:GetAttackDataEndTime(myHero) - LocalGameTimer()) or 0;
 		local maxMissileTravelTime = self.MyHeroIsMelee and 0 or (Utilities:GetAutoAttackRange(myHero) / self:GetMissileSpeed());
 		local Minions = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
