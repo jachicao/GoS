@@ -455,6 +455,13 @@ class "__Damage"
 				local level = Utilities:GetLevel(args.From);
 				args.RawMagical = args.RawMagical + LocalMathMax(15 + 5 * level, -10 + 10 * level, -60 + 15 * level, -125 + 20 * level, -200 + 25 * level) + 0.8 * args.From.ap;
 			end,
+			["Draven"] = function(args)
+				if BuffManager:HasBuff(args.From, "DravenSpinningAttack") then
+					local level = Utilities:GetSpellLevel(args.From, _Q);
+					args.RawPhysical = args.RawPhysical + (35 + 10 * level) * 0.01 * args.From.totalDamage; 
+				end
+
+			end,
 			["Graves"] = function(args)
 				local t = { 70, 71, 72, 74, 75, 76, 78, 80, 81, 83, 85, 87, 89, 91, 95, 96, 97, 100 };
 				args.RawTotal = args.RawTotal * t[self:GetMaxLevel(args.From)] * 0.01;
@@ -469,7 +476,7 @@ class "__Damage"
 			end,
 			["Nasus"] = function(args)
 				if BuffManager:HasBuff(args.From, "NasusQ") then
-					args.RawPhysical = args.RawPhysical + LocalMathMax(BuffManager:GetBuffCount(args.From, "nasusqstacks"), 0) + 10 + 20 * Utilities:GetSpellLevel(args.From, _Q);
+					args.RawPhysical = args.RawPhysical + LocalMathMax(BuffManager:GetBuffCount(args.From, "NasusQStacks"), 0) + 10 + 20 * Utilities:GetSpellLevel(args.From, _Q);
 				end
 			end,
 			["Thresh"] = function(args)
@@ -511,7 +518,7 @@ class "__Damage"
 		};
 		self.VariableChampionDamageDatabase = {
 			["Vayne"] = function(args)
-				if BuffManager:GetBuffCount(args.Target, "vaynesilvereddebuff") == 2 then
+				if BuffManager:GetBuffCount(args.Target, "VayneSilveredDebuff") == 2 then
 					local level = Utilities:GetSpellLevel(args.From, _W);
 					args.CalculatedTrue = args.CalculatedTrue + LocalMathMax((0.045 + 0.015 * level) * args.Target.maxHealth, 20 + 20 * level);
 				end
@@ -853,12 +860,69 @@ class "__Utilities"
 		};
 		self.SpecialAutoAttackRanges = {
 			["Caitlyn"] = function(from, target)
-				if target ~= nil and BuffManager:HasBuff(target, "CaitlynYordleTrapInternal") then
+				if target ~= nil and BuffManager:HasBuff(target, "caitlynyordletrapinternal") then
 					return 650;
 				end
 				return 0;
 			end,
 		};
+		self.SpecialWindUpTimes = {
+			["TwistedFate"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "BlueCardPreAttack") or BuffManager:HasBuff(unit, "RedCardPreAttack") or BuffManager:HasBuff(unit, "GoldCardPreAttack") then
+					return 0.125;
+				end
+				return nil;
+			end,
+		};
+
+		self.SpecialMissileSpeeds = {
+			["Caitlyn"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "caitlynheadshot") then
+					return 3000;
+				end
+				return nil;
+			end,
+			["Graves"] = function(unit, target)
+				return 3800;
+			end,
+			["Illaoi"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "IllaoiW") then
+					return 1600;
+				end
+				return nil;
+			end,
+			["Jayce"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "jaycestancegun") then
+					return 2000;
+				end
+				return nil;
+			end,
+			["Jhin"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "jhinpassiveattackbuff") then
+					return 3000;
+				end
+				return nil;
+			end,
+			["Jinx"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "JinxQ") then
+					return 2000;
+				end
+				return nil;
+			end,	
+			["Poppy"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "poppypassivebuff") then
+					return 1600;
+				end
+				return nil;
+			end,
+			["Viktor"] = function(unit, target)
+				if BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") then
+					return 3000;
+				end
+				return nil;
+			end,
+		};
+
 		self.SpecialMelees = {
 			["Azir"] = function(target) return true end,
 			["Thresh"] = function(target) return true end,
@@ -953,7 +1017,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:IsMelee(unit)
-		if LocalMathAbs(self:GetAttackDataProjectileSpeed(unit)) < EPSILON then
+		if LocalMathAbs(unit.attackData.projectileSpeed) < EPSILON then
 			return true;
 		end
 		if self.SpecialMelees[unit.charName] ~= nil then
@@ -1076,9 +1140,6 @@ class "__Utilities"
 			if not target.valid then
 				return false;
 			end
-			if target.isImmortal then
-				return false;
-			end
 		end
 		if target.dead or (not target.visible) or (not target.isTargetable) then
 			return false;
@@ -1121,7 +1182,7 @@ class "__Utilities"
 		if EnemiesInGame["Zilean"] and (BuffManager:HasBuff(target, "ChronoShift") or BuffManager:HasBuff(target, "chronorevive")) and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
 			return true;
 		end
-		return false;
+		return target.isImmortal;
 	end
 
 	function __Utilities:GetHotKeyFromSlot(slot)
@@ -1184,6 +1245,12 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetAttackDataWindUpTime(unit)
+		if self.SpecialWindUpTimes[unit.charName] ~= nil then
+			local SpecialWindUpTime = self.SpecialWindUpTimes[unit.charName](unit);
+			if SpecialWindUpTime then
+				return SpecialWindUpTime;
+			end
+		end
 		return unit.attackData.windUpTime;
 	end
 
@@ -1204,6 +1271,15 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetAttackDataProjectileSpeed(unit)
+		if self.SpecialMissileSpeeds[unit.charName] ~= nil then
+			local projectileSpeed = self.SpecialMissileSpeeds[unit.charName](unit);
+			if projectileSpeed then
+				return projectileSpeed;
+			end
+		end
+		if Utilities:IsMelee(unit) then
+			return LocalMathHuge;
+		end
 		return unit.attackData.projectileSpeed;
 	end
 
@@ -2166,41 +2242,6 @@ class "__Orbwalker"
 				return false;
 			end,
 		};
-		self.SpecialWindUpTimes = {
-			["TwistedFate"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "BlueCardPreAttack") or BuffManager:HasBuff(unit, "RedCardPreAttack") or BuffManager:HasBuff(unit, "GoldCardPreAttack") then
-					return 0.125;
-				end
-				return nil;
-			end,
-		};
-
-		self.SpecialMissileSpeeds = {
-			["Jhin"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "jhinpassiveattackbuff") then
-					return 3000;
-				end
-				return nil;
-			end,
-			["Jinx"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "JinxQ") then
-					return 2000;
-				end
-				return nil;
-			end,
-			["Poppy"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "poppypassivebuff") then
-					return 1600;
-				end
-				return nil;
-			end,
-			["Viktor"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") then
-					return 3000;
-				end
-				return nil;
-			end,
-		};
 		self.SupportHeroes = {
 			["Alistar"]			= true,
 			["Bard"]			= true,
@@ -2371,6 +2412,14 @@ class "__Orbwalker"
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
+
+		if Utilities:IsAutoAttacking(myHero) then
+			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
+			self.SpellWindUpTime = Utilities:GetSpellWindUpTime(myHero);
+			self.AttackDataAnimationTime = Utilities:GetAttackDataAnimationTime(myHero);
+			self.SpellAnimationTime = Utilities:GetSpellAnimationTime(myHero);
+		end
+
 		local state = Utilities:GetAttackDataState(myHero);
 		if state == STATE_WINDUP then
 			if self.MyHeroState ~= STATE_WINDUP then
@@ -2693,20 +2742,6 @@ class "__Orbwalker"
 	function __Orbwalker:GetWindUpTime(unit, target)
 		unit = self:GetUnit(unit);
 		local windUpTime = Utilities:GetAttackDataWindUpTime(unit);
-		if Utilities:IsAutoAttacking(unit) then
-			local SpellWindUpTime = Utilities:GetSpellWindUpTime(unit);
-			if unit.isMe then
-				self.AttackDataWindUpTime = windUpTime;
-				self.SpellWindUpTime = SpellWindUpTime;
-			end
-			return SpellWindUpTime;
-		end
-		if self.SpecialWindUpTimes[unit.charName] ~= nil then
-			local SpecialWindUpTime = self.SpecialWindUpTimes[unit.charName](unit);
-			if SpecialWindUpTime then
-				return SpecialWindUpTime;
-			end
-		end
 		if LocalMathAbs(self.AttackDataWindUpTime - windUpTime) < EPSILON then
 			return self.SpellWindUpTime;
 		end
@@ -2719,14 +2754,6 @@ class "__Orbwalker"
 	function __Orbwalker:GetAnimationTime(unit, target)
 		unit = self:GetUnit(unit);
 		local animationTime = Utilities:GetAttackDataAnimationTime(unit);
-		if Utilities:IsAutoAttacking(unit) then
-			local SpellAnimationTime = Utilities:GetSpellAnimationTime(unit);
-			if unit.isMe then
-				self.AttackDataAnimationTime = animationTime;
-				self.SpellAnimationTime = SpellAnimationTime;
-			end
-			return SpellAnimationTime;
-		end
 		if LocalMathAbs(self.AttackDataAnimationTime - animationTime) < EPSILON then
 			return self.SpellAnimationTime;
 		end
@@ -2739,15 +2766,6 @@ class "__Orbwalker"
 
 	function __Orbwalker:GetMissileSpeed(unit)
 		unit = self:GetUnit(unit);
-		if self.SpecialMissileSpeeds[unit.charName] ~= nil then
-			local projectileSpeed = self.SpecialMissileSpeeds[unit.charName](unit);
-			if projectileSpeed then
-				return projectileSpeed;
-			end
-		end
-		if Utilities:IsMelee(unit) then
-			return LocalMathHuge;
-		end
 		return Utilities:GetAttackDataProjectileSpeed(unit);
 	end
 
