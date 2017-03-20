@@ -1240,7 +1240,9 @@ class "__Utilities"
 
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
-			return unit.activeSpell.target > 0 and self:IsAutoAttack(unit.activeSpell.name);
+			if unit.activeSpell.target > 0 then
+				return not unit.isChanneling;
+			end
 		end
 		return false;
 	end
@@ -1261,6 +1263,14 @@ class "__Utilities"
 
 	function __Utilities:GetSpellAnimationTime(unit)
 		return unit.activeSpell.animation;
+	end
+
+	function __Utilities:GetActiveSpellSlot(unit)
+		return unit.activeSpellSlot;
+	end
+
+	function __Utilities:GetActiveSpellName(unit, slot)
+		return unit.activeSpell.name;
 	end
 
 	function __Utilities:GetAttackDataWindUpTime(unit)
@@ -1704,6 +1714,8 @@ class "__IncomingAttack"
 						else
 							self.Invalid = true;
 						end
+					else
+						self.Invalid = true;
 					end
 				end
 				if count > 0 then
@@ -2184,6 +2196,8 @@ class "__Orbwalker"
 		self.MyHeroAttacks = {};
 
 		self.FastKiting = false;
+		self.AutoAttackResetted = false;
+		self.AutoAttackResetCastTime = 0;
 
 		self.MenuKeys = {
 			[ORBWALKER_MODE_COMBO] = {},
@@ -2243,7 +2257,7 @@ class "__Orbwalker"
 		};
 		self.DisableAutoAttack = {
 			["Darius"] = function(unit)
-				return BuffManager:HasBuff(unit, "DariusQCast");
+				return BuffManager:HasBuff(unit, "dariusqcast");
 			end,
 			["Graves"] = function(unit)
 				if LocalMathAbs(unit.hudAmmo) < EPSILON then
@@ -2278,6 +2292,43 @@ class "__Orbwalker"
 			["Thresh"]			= true,
 			["Zilean"]			= true,
 			["Zyra"]			= true,
+		};
+
+		self.AutoAttackResets = {
+			["Blitzcrank"] = { Slot = _E },
+			["Darius"] = { Slot = _W },
+			["DrMundo"] = { Slot = _E },
+			["Fiora"] = { Slot = _E },
+			["Gangplank"] = { Slot = _Q },
+			["Garen"] = { Slot = _Q },
+			["Graves"] = { Slot = _E },
+			["Kassadin"] = { Slot = _W },
+			["Illaoi"] = { Slot = _W },
+			["Jax"] = { Slot = _W },
+			["Jayce"] = { Slot = _W, Name = "JayceHyperCharge"},
+			["Katarina"] = { Slot = _E },
+			["Leona"] = { Slot = _Q },
+			["Lucian"] = { Slot = _E },
+			["MasterYi"] = { Slot = _W },
+			["Mordekaiser"] = { Slot = _Q },
+			["Nautilus"] = { Slot = _W },
+			["Nidalee"] = { Slot = _Q, Name = "Takedown" },
+			["Nasus"] = { Slot = _Q },
+			["RekSai"] = { Slot = _Q },
+			["Renekton"] = { Slot = _W },
+			["Rengar"] = { Slot = _Q },
+			["Riven"] = { Slot = _Q },
+			["Sejuani"] = { Slot = _W },
+			["Sivir"] = { Slot = _W },
+			["Talon"] = { Slot = _Q },
+			["Teemo"] = { Slot = _Q },
+			["Trundle"] = { Slot = _Q },
+			["Vayne"] = { Slot = _Q },
+			["Vi"] = { Slot = _E },
+			["Volibear"] = { Slot = _Q },
+			["MonkeyKing"] = { Slot = _Q },
+			["XinZhao"] = { Slot = _Q },
+			["Yorick"] = { Slot = _Q },
 		};
 
 		self.TargetByType = {
@@ -2439,11 +2490,24 @@ class "__Orbwalker"
 			self.SpellAnimationTime = Utilities:GetSpellAnimationTime(myHero);
 		end
 
+		local AutoAttackReset = self.AutoAttackResets[myHero.charName];
+		if AutoAttackReset ~= nil then
+			local castTime = myHero:GetSpellData(AutoAttackReset.Slot).castTime;
+			if castTime > self.AutoAttackResetCastTime then
+				if self.AutoAttackResetCastTime > 0 then
+					local name = AutoAttackReset["Name"];
+					if name == nil or name == myHero:GetSpellData(AutoAttackReset.Slot).name then
+						self:__OnAutoAttackReset();
+					end
+				end
+				self.AutoAttackResetCastTime = castTime;
+			end
+		end
+
 		local state = Utilities:GetAttackDataState(myHero);
 		if state == STATE_WINDUP then
 			if self.MyHeroState ~= STATE_WINDUP then
 				self:__OnAttack();
-				--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
 			end
 		end
 		self.MyHeroState = state;
@@ -2483,8 +2547,15 @@ class "__Orbwalker"
 		end
 	end
 
+	function __Orbwalker:__OnAutoAttackReset()
+		self.AutoAttackResetted = true;
+		self.LastAutoAttackSent = 0;
+	end
+
 	function __Orbwalker:__OnAttack()
+		--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
 		self.FastKiting = true;
+		self.AutoAttackResetted = false;
 		for i = 1, #self.OnAttackCallbacks do
 			self.OnAttackCallbacks[i]();
 		end
@@ -2755,14 +2826,21 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanIssueOrder(unit)
 		unit = self:GetUnit(unit);
+		if unit.isMe then
+			if self.AutoAttackResetted then
+				return true;
+			end
+		end
 		return self:CanAttackTime(unit) >= 0;
 	end
 
 	function __Orbwalker:GetWindUpTime(unit, target)
 		unit = self:GetUnit(unit);
 		local windUpTime = Utilities:GetAttackDataWindUpTime(unit);
-		if LocalMathAbs(self.AttackDataWindUpTime - windUpTime) < EPSILON then
-			return self.SpellWindUpTime;
+		if unit.isMe then
+			if LocalMathAbs(self.AttackDataWindUpTime - windUpTime) < EPSILON then
+				return self.SpellWindUpTime;
+			end
 		end
 		if unit.charName == "Azir" then
 			--TODO
@@ -2773,8 +2851,10 @@ class "__Orbwalker"
 	function __Orbwalker:GetAnimationTime(unit, target)
 		unit = self:GetUnit(unit);
 		local animationTime = Utilities:GetAttackDataAnimationTime(unit);
-		if LocalMathAbs(self.AttackDataAnimationTime - animationTime) < EPSILON then
-			return self.SpellAnimationTime;
+		if unit.isMe then
+			if LocalMathAbs(self.AttackDataAnimationTime - animationTime) < EPSILON then
+				return self.SpellAnimationTime;
+			end
 		end
 		if unit.charName == "Azir" then
 			--TODO
