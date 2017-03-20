@@ -841,7 +841,7 @@ class "__Utilities"
 				return BuffManager:HasBuff(unit, "AbsoluteZero");
 			end,
 			["Pantheon"] = function(unit)
-				return BuffManager:HasBuff(unit, "PantheonE") or BuffManager:HasBuff(unit, "PantheonRJump");
+				return BuffManager:HasBuff(unit, "pantheonesound") or BuffManager:HasBuff(unit, "PantheonRJump");
 			end,
 			["Shen"] = function(unit)
 				return BuffManager:HasBuff(unit, "shenstandunitedlock");
@@ -943,10 +943,10 @@ class "__Utilities"
 		};
 
 		self.SpecialMelees = {
-			["Azir"] = function(target) return true end,
-			["Thresh"] = function(target) return true end,
-			["Velkoz"] = function(target) return true end,
-			["Viktor"] = function(target) return BuffManager:HasBuff(target, "ViktorPowerTransferReturn") end,
+			["Azir"] = function(unit) return true end,
+			["Thresh"] = function(unit) return true end,
+			["Velkoz"] = function(unit) return true end,
+			["Viktor"] = function(unit) return BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") end,
 		};
 		self.UndyingBuffs = {
 			["Aatrox"] = function(target, addHealthCheck)
@@ -1131,7 +1131,7 @@ class "__Utilities"
 	function __Utilities:TotalShield(target)
 		local result = target.shieldAD + target.shieldAP;
 		if target.charName == "Blitzcrank" then
-			if not BuffManager:HasBuff(target, "BlitzcrankManaBarrierCD") and not BuffManager:HasBuff(target, "ManaBarrier") then
+			if not BuffManager:HasBuff(target, "manabarriercooldown") and not BuffManager:HasBuff(target, "manabarrier") then
 				result = result + target.mana * 0.5;
 			end
 		end
