@@ -1249,7 +1249,7 @@ class "__Utilities"
 
 	function __Utilities:IsCastingSpell(unit)
 		if self:IsWindingUp(unit) then
-			return not self:IsAutoAttacking(unit);
+			return unit.isChanneling;
 		end
 		return false;
 	end
@@ -1738,6 +1738,7 @@ class "__IncomingAttack"
 
 class "__TargetSelector"
 	function __TargetSelector:__init()
+		self.Loaded = false;
 		self.Menu = MenuElement({ id = "TargetSelector", name = "IC's Target Selector", type = MENU });
 		self.EnemiesAdded = {};
 		self.SelectedTarget = nil;
@@ -2029,12 +2030,14 @@ class "__TargetSelector"
 				end
 			end
 			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = false, callback = function()
-				if self.Menu.Priorities.Reset:Value() then
-					for charName, _ in pairs(self.EnemiesAdded) do
-						local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
-						self.Menu.Priorities[charName]:Value(priority);
+				if self.Loaded then
+					if self.Menu.Priorities.Reset:Value() then
+						for charName, _ in pairs(self.EnemiesAdded) do
+							local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
+							self.Menu.Priorities[charName]:Value(priority);
+						end
+						self.Menu.Priorities.Reset:Value(false);
 					end
-					self.Menu.Priorities.Reset:Value(false);
 				end
 			end });
 		end
@@ -2052,6 +2055,7 @@ class "__TargetSelector"
 		LocalCallbackAdd('WndMsg', function(msg, wParam)
 			self:OnWndMsg(msg, wParam);
 		end);
+		self.Loaded = true;
 	end
 
 	function __TargetSelector:OnDraw()
@@ -2296,6 +2300,7 @@ class "__Orbwalker"
 
 		self.AutoAttackResets = {
 			["Blitzcrank"] = { Slot = _E },
+			["Camille"] = { Slot = _Q },
 			["Darius"] = { Slot = _W },
 			["DrMundo"] = { Slot = _E },
 			["Fiora"] = { Slot = _E },
@@ -2785,12 +2790,8 @@ class "__Orbwalker"
 			end
 		end
 		if Utilities:IsChanneling(unit) then
-			if self.AllowMovement[unit.charName] == nil then
+			if self.AllowMovement[unit.charName] == nil or (not self.AllowMovement[unit.charName](unit)) then
 				return false;
-			else
-				if not self.AllowMovement[unit.charName](unit) then
-					return false;
-				end
 			end
 		end
 		return not IsAutoAttacking;
@@ -2805,9 +2806,8 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			local IsAutoAttacking = self:IsAutoAttacking(unit);
 			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
-				if not IsAutoAttacking then
+				if not self:IsAutoAttacking(unit) then
 					return false;
 				end
 			end
