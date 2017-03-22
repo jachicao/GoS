@@ -233,6 +233,9 @@ class "__ClickBlocker"
 		end
 	end
 
+
+]]
+
 --__ClickBlocker();
 
 local CONTROL_TYPE_ATTACK			= 1;
@@ -245,14 +248,54 @@ local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
 local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
 local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
 
+local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
+local CONTROL_MOVE_STEP_PRESS_POSITION			= 2;
+local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
+local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
+local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
+
 local ControlOrder = nil;
 
 local ControlAttackTable = {};
+local ControlMoveTable = {};
 
 ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
-		if LocalControlSetCursorPos(ControlOrder.TargetPosition) then
+		LocalControlSetCursorPos(ControlOrder.Target.pos);
 		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
+	end,
+	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
+		if ControlOrder.TargetIsHero then
+			LocalControlKeyDown(_G.HK_TCO);
+		end
+		--;
+		if LocalControlMouseEvent(0x0008) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+		end
+	end,
+	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
+		if LocalControlMouseEvent(0x0010) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+			if ControlOrder.TargetIsHero then
+				LocalControlKeyUp(_G.HK_TCO);
+			end
+		end
+	end,
+	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
+	end,
+	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
+		ControlOrder = nil;
+	end,
+};
+
+--[[
+ControlAttackTable = {
+	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
+		if LocalControlSetCursorPos(ControlOrder.Target.pos) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
 		else
 
 		end
@@ -292,14 +335,47 @@ ControlAttackTable = {
 		end
 	end,
 };
+]]
+
+
+ControlMoveTable = {
+	[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
+		LocalControlSetCursorPos(ControlOrder.TargetPosition);
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
+	end,
+	[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
+		LocalControlKeyDown(_G.HK_TCO);
+		if LocalControlMouseEvent(0x0008) then
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+		end
+	end,
+	[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
+		if LocalControlMouseEvent(0x0010) then
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
+			LocalControlKeyUp(_G.HK_TCO);
+		end
+	end,
+	[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
+	end,
+	[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
+		ControlOrder = nil;
+	end,
+};
+
 
 local ControlTypeTable = {
 	[CONTROL_TYPE_ATTACK] = function()
 		ControlAttackTable[ControlOrder.NextStep]();
 	end,
+	[CONTROL_TYPE_MOVE] = function()
+		ControlMoveTable[ControlOrder.NextStep]();
+	end
 }
 
-LocalCallbackAdd('Tick', function()
+LocalCallbackAdd('Draw', function()
 	--print(tostring(_G.mousePos:To2D().x) .. " " .. tostring(_G.mousePos:To2D().y) .. " " .. tostring(_G.mousePos:To2D().z));
 	if ControlOrder ~= nil then
 		ControlTypeTable[ControlOrder.Type]();
@@ -312,16 +388,53 @@ _G.Control.Attack = function(target)
 	if isNil then
 		ControlOrder = {
 			Type = CONTROL_TYPE_ATTACK;
-			TargetPosition = target.pos,
+			Target = target,
 			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
 			MousePosition = _G.cursorPos,
+			TargetIsHero = target.type == Obj_AI_Hero
 		};
 		ControlTypeTable[ControlOrder.Type]();
 	end
 	return isNil;
 end
 
-]]
+_G.Control.Move = function(a, b, c)
+	local isNil = ControlOrder == nil;
+	if isNil then
+		if a and b and c then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE;
+				TargetPosition = Vector(a, b, c),
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a and b then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE;
+				TargetPosition = Vector({ x = a, y = b}),
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE;
+				TargetPosition = a,
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		else
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE;
+				TargetPosition = _G.cursorPos,
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		end
+		ControlTypeTable[ControlOrder.Type]();
+	end
+	return isNil;
+end
+
 class "__BuffManager"
 	function __BuffManager:__init()
 		self.CachedBuffStacks = {};
@@ -500,6 +613,12 @@ class "__Damage"
 				local level = Utilities:GetSpellLevel(args.From, _W);
 				if level > 0 then
 					args.RawMagical = args.RawMagical + 6 + 4 * level + 0.25 * args.From.ap;
+				end
+			end,
+			["Viktor"] = function(args)
+				if BuffManager:HasBuff(args.From, "ViktorPowerTransferReturn") then
+					args.DamageType = DAMAGE_TYPE_MAGICAL;
+					args.RawMagical = args.RawMagical + 20 * Utilities:GetSpellLevel(args.From, _Q) + 0.5 * args.From.ap;
 				end
 			end,
 			["Vayne"] = function(args)
@@ -923,12 +1042,6 @@ class "__Utilities"
 			["Twitch"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "TwitchFullAutomatic") then
 					return 4000;
-				end
-				return nil;
-			end,
-			["Viktor"] = function(unit, target)
-				if BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") then
-					return 3000;
 				end
 				return nil;
 			end,
@@ -1988,8 +2101,8 @@ class "__TargetSelector"
 			end,
 			[TARGET_SELECTOR_MODE_NEAR_MOUSE] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = Utilities:GetDistanceSquared(a, mousePos);
-					local second = Utilities:GetDistanceSquared(b, mousePos);
+					local first = Utilities:GetDistanceSquared(a, _G.mousePos);
+					local second = Utilities:GetDistanceSquared(b, _G.mousePos);
 					return first < second;
 				end);
 				return targets[1];
@@ -2064,7 +2177,7 @@ class "__TargetSelector"
 				local t = ObjectManager:GetEnemyHeroes();
 				for i = 1, #t do
 					local hero = t[i];
-					if Utilities:IsInRange(hero, mousePos, 100) then
+					if Utilities:IsInRange(hero, _G.mousePos, 100) then
 						self.SelectedTarget = hero;
 						break;
 					end
@@ -2179,7 +2292,6 @@ class "__Orbwalker"
 		self.LastShouldWait = 0;
 		self.ForceTarget = nil;
 		self.ForceMovement = nil;
-		self.TargetChampionOnly = 0;
 
 		self.IsNone = false;
 		self.OnlyLastHit = false;
@@ -2187,8 +2299,6 @@ class "__Orbwalker"
 		self.MyHeroIsAutoAttacking = false;
 		self.MyHeroState = STATE_ATTACK;
 		self.MyHeroIsMelee = true;
-		self.MyHeroCanMove = true;
-		self.MyHeroCanAttack = true;
 
 		self.MyHeroAttacks = {};
 
@@ -2312,7 +2422,7 @@ class "__Orbwalker"
 			["Nautilus"] = { Slot = _W },
 			["Nidalee"] = { Slot = _Q, Name = "Takedown" },
 			["Nasus"] = { Slot = _Q },
-			["RekSai"] = { Slot = _Q },
+			["RekSai"] = { Slot = _Q, Name = "RekSaiQ" },
 			["Renekton"] = { Slot = _W },
 			["Rengar"] = { Slot = _Q },
 			["Riven"] = { Slot = _Q },
@@ -2527,8 +2637,6 @@ class "__Orbwalker"
 		]]
 
 		self.MyHeroIsMelee = Utilities:IsMelee(myHero);
-		self.MyHeroCanMove = self:CanMove();
-		self.MyHeroCanAttack = self:CanAttack();
 
 		if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
 			self.OnlyLastHit = (not self.Modes[ORBWALKER_MODE_LANECLEAR]);
@@ -2539,9 +2647,6 @@ class "__Orbwalker"
 		if self.LastHoldPosition > 0 and LocalGameTimer() - self.LastHoldPosition > 0.025 then
 			LocalControlKeyUp(72);
 			self.LastHoldPosition = 0;
-		end
-		if self.TargetChampionOnly > 0 and LocalGameTimer() - self.TargetChampionOnly > 0.025 then
-			LocalControlKeyUp(HK_TCO);
 		end
 		if (not self.IsNone) then
 			self:Orbwalk();
@@ -2573,7 +2678,8 @@ class "__Orbwalker"
 		if LocalGameIsChatOpen() or (not LocalGameIsOnTop()) then
 			return;
 		end
-		if self.MyHeroCanAttack then
+
+		if self:CanAttack() then
 			local target = self:GetTarget();
 			if target ~= nil then
 				local args = {
@@ -2584,21 +2690,23 @@ class "__Orbwalker"
 					self.OnPreAttackCallbacks[i](args);
 				end
 				if args.Process and args.Target ~= nil then
-					self.LastAutoAttackSent = LocalGameTimer();
-					_G.Control.Attack(args.Target);
-					self.HoldPosition = nil;
+					local boolean = _G.Control.Attack(args.Target);
+					if boolean == nil or boolean == true then
+						self.LastAutoAttackSent = LocalGameTimer();
+						self.HoldPosition = nil;
+					end
 					return;
 				end
 			end
 		end
 		if LocalGameTimer() - self.LastAutoAttackSent <= 0.2 then
-			return;
+			--return;
 		end
 		self:Move();
 	end
 
 	function __Orbwalker:Move()
-		if not self.MyHeroCanMove then
+		if not self:CanMove() then
 			return;
 		end
 		if LocalGameTimer() - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
@@ -2635,14 +2743,16 @@ class "__Orbwalker"
 				self.OnPreMovementCallbacks[i](args);
 			end
 			if args.Process and args.Target ~= nil then
-				self.TargetChampionOnly = LocalGameTimer();
-				LocalControlKeyDown(_G.HK_TCO);
-
-				self.LastMovementSent = LocalGameTimer();
-				if args.Target == mousePos then
-					_G.Control.Move();
+				if args.Target == _G.mousePos then
+					local boolean = _G.Control.Move();
+					if boolean == nil or boolean == true then
+						self.LastMovementSent = LocalGameTimer();
+					end
 				else
-					_G.Control.Move(args.Target);
+					local boolean = _G.Control.Move(args.Target);
+					if boolean == nil or boolean == true then
+						self.LastMovementSent = LocalGameTimer();
+					end
 				end
 				return;
 			end
@@ -2778,12 +2888,16 @@ class "__Orbwalker"
 	function __Orbwalker:GetMaximumIssueOrderDelay()
 		return LocalMathMax(self:GetIssueOrderDelay(), 0.15);
 	end
+
+	function __Orbwalker:IsWaitingResponseFromServer()
+		return LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay();
+	end
 	
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
 		local IsAutoAttacking = self:IsAutoAttacking(unit);
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
+			if self:IsWaitingResponseFromServer() then
 				if not IsAutoAttacking then
 					return false;
 				end
@@ -2806,7 +2920,7 @@ class "__Orbwalker"
 			return false;
 		end
 		if unit.isMe then
-			if LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay() then
+			if self:IsWaitingResponseFromServer() then
 				if not self:IsAutoAttacking(unit) then
 					return false;
 				end
@@ -2994,7 +3108,7 @@ class "__Orbwalker"
 		if self.ForceMovement ~= nil then
 			return self.ForceMovement;
 		end
-		return mousePos;
+		return _G.mousePos;
 	end
 
 	function __Orbwalker:RegisterMenuKey(mode, key)
