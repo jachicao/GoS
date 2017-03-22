@@ -61,6 +61,7 @@ local LocalCallbackDel				= Callback.Del;
 local LocalDrawColor				= Draw.Color;
 local LocalDrawCircle				= Draw.Circle;
 local LocalDrawText					= Draw.Text;
+local LocalControlIsKeyDown			= Control.IsKeyDown;
 local LocalControlMouseEvent		= Control.mouse_event;
 local LocalControlSetCursorPos		= Control.SetCursorPos;
 local LocalControlKeyUp				= Control.KeyUp;
@@ -94,21 +95,6 @@ local _Q							= _Q;
 local _W							= _W;
 local _E							= _E;
 local _R							= _R;
-local HK_Q							= HK_Q;
-local HK_W							= HK_W;
-local HK_E							= HK_E;
-local HK_R							= HK_R;
-local HK_ITEM_1						= HK_ITEM_1;
-local HK_ITEM_2						= HK_ITEM_2;
-local HK_ITEM_3						= HK_ITEM_3;
-local HK_ITEM_4						= HK_ITEM_4;
-local HK_ITEM_5						= HK_ITEM_5;
-local HK_ITEM_6						= HK_ITEM_6;
-local HK_ITEM_7						= HK_ITEM_7;
-local HK_SUMMONER_1					= HK_SUMMONER_1;
-local HK_SUMMONER_2					= HK_SUMMONER_2;
-local HK_TCO						= HK_TCO;
-local HK_LUS						= HK_LUS;
 local Obj_AI_SpawnPoint				= Obj_AI_SpawnPoint;
 local Obj_AI_Camp					= Obj_AI_Camp;
 local Obj_AI_Barracks				= Obj_AI_Barracks;
@@ -2187,6 +2173,7 @@ class "__Orbwalker"
 		self.LastShouldWait = 0;
 		self.ForceTarget = nil;
 		self.ForceMovement = nil;
+		self.TargetChampionOnly = 0;
 
 		self.IsNone = false;
 		self.OnlyLastHit = false;
@@ -2543,9 +2530,12 @@ class "__Orbwalker"
 				self:CalculateLastHittableMinions();
 			end
 		end
-		if LocalGameTimer() - self.LastHoldPosition > 0.025 and self.LastHoldPosition > 0 then
+		if self.LastHoldPosition > 0 and LocalGameTimer() - self.LastHoldPosition > 0.025 then
 			LocalControlKeyUp(72);
 			self.LastHoldPosition = 0;
+		end
+		if self.TargetChampionOnly > 0 and LocalGameTimer() - self.TargetChampionOnly > 0.025 then
+			LocalControlKeyUp(HK_TCO);
 		end
 		if (not self.IsNone) then
 			self:Orbwalk();
@@ -2559,6 +2549,7 @@ class "__Orbwalker"
 
 	function __Orbwalker:__OnAttack()
 		--Linq:Add(self.MyHeroAttacks, __IncomingAttack(myHero));
+		--print(tostring(LocalGameTimer() - self.LastAutoAttackSent));
 		self.FastKiting = true;
 		self.AutoAttackResetted = false;
 		for i = 1, #self.OnAttackCallbacks do
@@ -2638,6 +2629,9 @@ class "__Orbwalker"
 				self.OnPreMovementCallbacks[i](args);
 			end
 			if args.Process and args.Target ~= nil then
+				self.TargetChampionOnly = LocalGameTimer();
+				LocalControlKeyDown(_G.HK_TCO);
+
 				self.LastMovementSent = LocalGameTimer();
 				if args.Target == mousePos then
 					_G.Control.Move();
@@ -2776,7 +2770,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetMaximumIssueOrderDelay()
-		return 0.15 + Utilities:GetLatency();
+		return LocalMathMax(self:GetIssueOrderDelay(), 0.15);
 	end
 	
 	function __Orbwalker:CanMove(unit)
@@ -2816,7 +2810,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetIssueOrderDelay()
-		return Utilities:GetLatency() + 0.08;
+		return Utilities:GetLatency() * 1.5 - 0.005;
 	end
 
 	function __Orbwalker:CanAttackTime(unit)
