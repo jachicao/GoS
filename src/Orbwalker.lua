@@ -516,6 +516,12 @@ class "__Damage"
 					args.RawMagical = args.RawMagical + LocalMathMax(BuffManager:GetBuffCount(args.From, "orianapowerdaggerdisplay"), 0) * (0.4 + 1.6 * level + 0.03 * args.From.ap);
 				end
 			end,
+			["Quinn"] = function(args)
+				if BuffManager:HasBuff(args.Target, "QuinnW") then
+					local level = Utilities:GetLevel(args.From);
+					args.RawPhysical = args.RawPhysical + 10 + level * 5 + (0.14 + 0.02 * level) * args.From.totalDamage;
+				end
+			end,
 			["Vayne"] = function(args)
 				if BuffManager:GetBuffCount(args.Target, "VayneSilveredDebuff") == 2 then
 					local level = Utilities:GetSpellLevel(args.From, _W);
