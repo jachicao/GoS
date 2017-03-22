@@ -323,8 +323,12 @@ AddLoadCallback(function()
 		end,
 		[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
 			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
-				ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
 				LocalControlKeyUp(_G.HK_TCO);
+				if ControlOrder.TargetPosition ~= nil then
+					ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
+				else
+					ControlOrder = nil;
+				end
 			end
 		end,
 		[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
@@ -342,30 +346,29 @@ AddLoadCallback(function()
 		if isNil then
 			if a and b and c then
 				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE;
+					Type = CONTROL_TYPE_MOVE,
 					TargetPosition = Vector(a, b, c),
 					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
 					MousePosition = _G.cursorPos,
 				};
 			elseif a and b then
 				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE;
+					Type = CONTROL_TYPE_MOVE,
 					TargetPosition = Vector({ x = a, y = b}),
 					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
 					MousePosition = _G.cursorPos,
 				};
 			elseif a then
 				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE;
+					Type = CONTROL_TYPE_MOVE,
 					TargetPosition = a,
 					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
 					MousePosition = _G.cursorPos,
 				};
 			else
 				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE;
-					TargetPosition = _G.cursorPos,
-					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+					Type = CONTROL_TYPE_MOVE,
+					NextStep = CONTROL_MOVE_STEP_PRESS_POSITION,
 					MousePosition = _G.cursorPos,
 				};
 			end
