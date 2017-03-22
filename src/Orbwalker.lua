@@ -427,7 +427,7 @@ AddLoadCallback(function()
 			ControlOrder = nil;
 		end,
 	};
-
+	--[[
 	_G.Control.CastSpell = function(key, a, b, c)
 		local isNil = ControlOrder == nil;
 		if isNil then
@@ -477,6 +477,7 @@ AddLoadCallback(function()
 		end
 		return isNil;
 	end
+	]]
 
 	ControlTypeTable = {
 		[CONTROL_TYPE_ATTACK] = function()
