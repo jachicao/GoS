@@ -95,6 +95,10 @@ local _Q							= _Q;
 local _W							= _W;
 local _E							= _E;
 local _R							= _R;
+local MOUSEEVENTF_LEFTDOWN			= MOUSEEVENTF_LEFTDOWN;
+local MOUSEEVENTF_LEFTUP			= MOUSEEVENTF_LEFTUP;
+local MOUSEEVENTF_RIGHTDOWN			= MOUSEEVENTF_RIGHTDOWN;
+local MOUSEEVENTF_RIGHTUP			= MOUSEEVENTF_RIGHTUP;
 local Obj_AI_SpawnPoint				= Obj_AI_SpawnPoint;
 local Obj_AI_Camp					= Obj_AI_Camp;
 local Obj_AI_Barracks				= Obj_AI_Barracks;
@@ -182,14 +186,14 @@ LocalCallbackAdd('Load', function()
 	end);
 end);
 
---[[
 
+--[[
 AddLoadCallback(function()
 	LocalCallbackAdd('Tick', function()
 		if _G.Game.CanUseSpell(_Q) == READY then
 			local t = ObjectManager:GetEnemyMinions();
 			for i = 1, #t do
-				_G.Control.CastSpell(HK_Q, t[i].pos)
+				_G.Control.CastSpell(HK_Q)
 			end
 		end
 	end);
@@ -238,202 +242,260 @@ class "__ClickBlocker"
 
 --__ClickBlocker();
 
-local CONTROL_TYPE_ATTACK			= 1;
-local CONTROL_TYPE_MOVE				= 2;
-local CONTROL_TYPE_CASTSPELL		= 2;
-
-local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
-local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
-local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
-local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
-local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
-
-local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
-local CONTROL_MOVE_STEP_PRESS_POSITION			= 2;
-local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
-local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
-local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
-
-local ControlOrder = nil;
-
-local ControlAttackTable = {};
-local ControlMoveTable = {};
-
-ControlAttackTable = {
-	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
-		LocalControlSetCursorPos(ControlOrder.Target.pos);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
-	end,
-	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
-		if ControlOrder.TargetIsHero then
-			LocalControlKeyDown(_G.HK_TCO);
-		end
-		--;
-		if LocalControlMouseEvent(0x0008) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
-		end
-	end,
-	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
-		if LocalControlMouseEvent(0x0010) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+AddLoadCallback(function()
+	local ControlOrder = nil;
+	local CONTROL_TYPE_ATTACK			= 1;
+	local CONTROL_TYPE_MOVE				= 2;
+	local CONTROL_TYPE_CASTSPELL		= 3;
+	local ControlTypeTable = {};
+	
+	local ControlAttackTable = {};
+	local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
+	local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
+	local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
+	local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
+	local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
+	
+	ControlAttackTable = {
+		[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
+			LocalControlSetCursorPos(ControlOrder.Target.pos);
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
+		end,
+		[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
 			if ControlOrder.TargetIsHero then
+				LocalControlKeyDown(_G.HK_TCO);
+			end
+			--;
+			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
+				ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+			end
+		end,
+		[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
+			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
+				ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+				if ControlOrder.TargetIsHero then
+					LocalControlKeyUp(_G.HK_TCO);
+				end
+			end
+		end,
+		[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
+			local position = ControlOrder.MousePosition;
+			LocalControlSetCursorPos(position.x, position.y);
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
+		end,
+		[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
+			ControlOrder = nil;
+		end,
+	};
+	
+	_G.Control.Attack = function(target)
+		local isNil = ControlOrder == nil;
+		if isNil then
+			ControlOrder = {
+				Type = CONTROL_TYPE_ATTACK;
+				Target = target,
+				NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+				TargetIsHero = target.type == Obj_AI_Hero
+			};
+			ControlTypeTable[ControlOrder.Type]();
+		end
+		return isNil;
+	end
+
+	local ControlMoveTable = {};
+	local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
+	local CONTROL_MOVE_STEP_PRESS_POSITION				= 2;
+	local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
+	local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
+	local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
+	
+	ControlMoveTable = {
+		[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
+			LocalControlSetCursorPos(ControlOrder.TargetPosition);
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
+		end,
+		[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
+			LocalControlKeyDown(_G.HK_TCO);
+			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
+				ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+			end
+		end,
+		[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
+			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
+				ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
 				LocalControlKeyUp(_G.HK_TCO);
 			end
-		end
-	end,
-	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
-	end,
-	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
-		ControlOrder = nil;
-	end,
-};
-
---[[
-ControlAttackTable = {
-	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
-		if LocalControlSetCursorPos(ControlOrder.Target.pos) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
-		else
-
-		end
-		--LocalControlSetCursorPos(ControlOrder.TargetPosition);
-		--ControlAttackTable[ControlOrder.NextStep]();
-	end,
-	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
-		if _G.mousePos:DistanceTo(ControlOrder.TargetPosition) < 10 then
-			if LocalControlMouseEvent(0x0008) then
-				ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
-				--ControlAttackTable[ControlOrder.NextStep]();
-			end
-		else
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION;
-			ControlAttackTable[ControlOrder.NextStep]();
-		end
-	end,
-	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
-		if LocalControlMouseEvent(0x0010) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
-			--ControlAttackTable[ControlOrder.NextStep]();
-		end
-	end,
-	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
-		--ControlOrder = nil;
-		--ControlAttackTable[ControlOrder.NextStep]();
-	end,
-	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
-		if Utilities:GetDistance2DSquared(_G.cursorPos, ControlOrder.MousePosition) < 100 then
+		end,
+		[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
+			local position = ControlOrder.MousePosition;
+			LocalControlSetCursorPos(position.x, position.y);
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
+		end,
+		[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
 			ControlOrder = nil;
-		else
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+		end,
+	};
+	
+	_G.Control.Move = function(a, b, c)
+		local isNil = ControlOrder == nil;
+		if isNil then
+			if a and b and c then
+				ControlOrder = {
+					Type = CONTROL_TYPE_MOVE;
+					TargetPosition = Vector(a, b, c),
+					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			elseif a and b then
+				ControlOrder = {
+					Type = CONTROL_TYPE_MOVE;
+					TargetPosition = Vector({ x = a, y = b}),
+					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			elseif a then
+				ControlOrder = {
+					Type = CONTROL_TYPE_MOVE;
+					TargetPosition = a,
+					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			else
+				ControlOrder = {
+					Type = CONTROL_TYPE_MOVE;
+					TargetPosition = _G.cursorPos,
+					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			end
+			ControlTypeTable[ControlOrder.Type]();
+		end
+		return isNil;
+	end
+	
+	local ControlCastSpellTable = {};
+	local CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION		= 1;
+	local CONTROL_CASTSPELL_STEP_PRESS_KEY					= 2;
+	local CONTROL_CASTSPELL_STEP_PRESS_POSITION				= 3;
+	local CONTROL_CASTSPELL_STEP_RELEASE_POSITION			= 4;
+	local CONTROL_CASTSPELL_STEP_RELEASE_KEY				= 5;
+	local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 6;
+	local CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION		= 7;
+	
+	ControlCastSpellTable = {
+		[CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION] = function()
+			local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
+			LocalControlSetCursorPos(position);
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
+		end,
+		[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
+			LocalControlKeyDown(ControlOrder.Key);
+			if ControlOrder.TargetPosition ~= nil then
+				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_POSITION;
+			else
+				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+			end
+		end,
+		[CONTROL_CASTSPELL_STEP_PRESS_POSITION] = function()
+			if LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN) then
+				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_POSITION;
+			end
+		end,
+		[CONTROL_CASTSPELL_STEP_RELEASE_POSITION] = function()
+			if LocalControlMouseEvent(MOUSEEVENTF_LEFTUP) then
+				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+			end
+		end,
+		[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
+			LocalControlKeyUp(ControlOrder.Key);
+			if ControlOrder.TargetPosition ~= nil then
+				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION;
+			else
+				ControlOrder = nil;
+			end
+		end,
+		[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
+			local position = ControlOrder.MousePosition;
+			LocalControlSetCursorPos(position.x, position.y);
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION;
+		end,
+		[CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION] = function()
+			ControlOrder = nil;
+		end,
+	};
+
+	_G.Control.CastSpell = function(key, a, b, c)
+		local isNil = ControlOrder == nil;
+		if isNil then
+			if a and b and c then
+				ControlOrder = {
+					Type = CONTROL_TYPE_CASTSPELL,
+					Key = key,
+					TargetPosition = Vector(a, b, c),
+					NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			elseif a and b then
+				ControlOrder = {
+					Type = CONTROL_TYPE_CASTSPELL,
+					Key = key,
+					TargetPosition = Vector({ x = a, y = b}),
+					NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
+				};
+			elseif a then
+				if a.pos then
+					ControlOrder = {
+						Type = CONTROL_TYPE_CASTSPELL,
+						Key = key,
+						Target = a,
+						TargetPosition = a.pos,
+						NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+						MousePosition = _G.cursorPos,
+					};
+				else
+					ControlOrder = {
+						Type = CONTROL_TYPE_CASTSPELL,
+						Key = key,
+						TargetPosition = a,
+						NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+						MousePosition = _G.cursorPos,
+					};
+				end
+			else
+				ControlOrder = {
+					Type = CONTROL_TYPE_CASTSPELL,
+					Key = key,
+					NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY,
+				};
+			end
+			ControlTypeTable[ControlOrder.Type]();
+		end
+		return isNil;
+	end
+
+	ControlTypeTable = {
+		[CONTROL_TYPE_ATTACK] = function()
 			ControlAttackTable[ControlOrder.NextStep]();
+		end,
+		[CONTROL_TYPE_MOVE] = function()
+			ControlMoveTable[ControlOrder.NextStep]();
+		end,
+		[CONTROL_TYPE_CASTSPELL] = function()
+			ControlCastSpellTable[ControlOrder.NextStep]();
 		end
-	end,
-};
-]]
-
-
-ControlMoveTable = {
-	[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
-		LocalControlSetCursorPos(ControlOrder.TargetPosition);
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
-	end,
-	[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
-		LocalControlKeyDown(_G.HK_TCO);
-		if LocalControlMouseEvent(0x0008) then
-			ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+	};
+	
+	LocalCallbackAdd('Draw', function()
+		--print(tostring(_G.mousePos:To2D().x) .. " " .. tostring(_G.mousePos:To2D().y) .. " " .. tostring(_G.mousePos:To2D().z));
+		if ControlOrder ~= nil then
+			ControlTypeTable[ControlOrder.Type]();
 		end
-	end,
-	[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
-		if LocalControlMouseEvent(0x0010) then
-			ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
-			LocalControlKeyUp(_G.HK_TCO);
-		end
-	end,
-	[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
-	end,
-	[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
-		ControlOrder = nil;
-	end,
-};
-
-
-local ControlTypeTable = {
-	[CONTROL_TYPE_ATTACK] = function()
-		ControlAttackTable[ControlOrder.NextStep]();
-	end,
-	[CONTROL_TYPE_MOVE] = function()
-		ControlMoveTable[ControlOrder.NextStep]();
-	end
-}
-
-LocalCallbackAdd('Draw', function()
-	--print(tostring(_G.mousePos:To2D().x) .. " " .. tostring(_G.mousePos:To2D().y) .. " " .. tostring(_G.mousePos:To2D().z));
-	if ControlOrder ~= nil then
-		ControlTypeTable[ControlOrder.Type]();
-	end
+	end);
+	
+	
 end);
-
-
-_G.Control.Attack = function(target)
-	local isNil = ControlOrder == nil;
-	if isNil then
-		ControlOrder = {
-			Type = CONTROL_TYPE_ATTACK;
-			Target = target,
-			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
-			MousePosition = _G.cursorPos,
-			TargetIsHero = target.type == Obj_AI_Hero
-		};
-		ControlTypeTable[ControlOrder.Type]();
-	end
-	return isNil;
-end
-
-_G.Control.Move = function(a, b, c)
-	local isNil = ControlOrder == nil;
-	if isNil then
-		if a and b and c then
-			ControlOrder = {
-				Type = CONTROL_TYPE_MOVE;
-				TargetPosition = Vector(a, b, c),
-				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-				MousePosition = _G.cursorPos,
-			};
-		elseif a and b then
-			ControlOrder = {
-				Type = CONTROL_TYPE_MOVE;
-				TargetPosition = Vector({ x = a, y = b}),
-				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-				MousePosition = _G.cursorPos,
-			};
-		elseif a then
-			ControlOrder = {
-				Type = CONTROL_TYPE_MOVE;
-				TargetPosition = a,
-				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-				MousePosition = _G.cursorPos,
-			};
-		else
-			ControlOrder = {
-				Type = CONTROL_TYPE_MOVE;
-				TargetPosition = _G.cursorPos,
-				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-				MousePosition = _G.cursorPos,
-			};
-		end
-		ControlTypeTable[ControlOrder.Type]();
-	end
-	return isNil;
-end
 
 class "__BuffManager"
 	function __BuffManager:__init()
