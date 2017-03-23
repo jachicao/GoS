@@ -265,7 +265,6 @@ AddLoadCallback(function()
 			if ControlOrder.TargetIsHero then
 				LocalControlKeyDown(_G.HK_TCO);
 			end
-			--;
 			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
 				ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
 			end
@@ -694,6 +693,12 @@ class "__Damage"
 			end,
 		};
 		self.VariableChampionDamageDatabase = {
+			["Jhin"] = function(args)
+				if BuffManager:HasBuff(args.From, "jhinpassiveattackbuff") then
+					args.CriticalStrike = true;
+					args.RawPhysical = args.RawPhysical + LocalMathMin(0.25, 0.1 + 0.05 * LocalMathCeil(Utilities:GetLevel(args.From) / 5)) * (args.Target.maxHealth - args.Target.health);
+				end
+			end,
 			["Orianna"] = function(args)
 				local level = LocalMathCeil(Utilities:GetLevel(args.From) / 3);
 				args.RawMagical = args.RawMagical + 2 + 8 * level + 0.15 * args.From.ap;
@@ -926,11 +931,11 @@ class "__Damage"
 			CalculatedMagical = static.CalculatedMagical,
 			DamageType = static.DamageType,
 			TargetIsMinion = target.type == Obj_AI_Minion,
+			CriticalStrike = false,
 		};
 		if args.TargetIsMinion and Utilities:IsOtherMinion(args.Target) then
 			return 1;
 		end
-		local CriticalStrike = false;
 
 		if self.VariableChampionDamageDatabase[args.From.charName] ~= nil then
 			self.VariableChampionDamageDatabase[args.From.charName](args);
@@ -953,6 +958,9 @@ class "__Damage"
 		end
 
 		local percentMod = 1;
+		if LocalMathAbs(args.From.critChance - 1) < EPSILON or args.CriticalStrike then
+			percentMod = percentMod * self:GetCriticalStrikePercent(args.From);
+		end
 		return percentMod * args.CalculatedPhysical + args.CalculatedMagical + args.CalculatedTrue;
 	end
 
@@ -979,6 +987,20 @@ class "__Damage"
 			end
 		end
 		return self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, from.totalDamage, false, true);
+	end
+
+	function __Damage:GetCriticalStrikePercent(from)
+		local baseCriticalDamage = 2 + (ItemManager:HasItem(from, 3031) and 0.5 or 0);
+		local percentMod = 1;
+		local fixedMod = 0;
+		if from.charName == "Jhin" then
+			percentMod = 0.75;
+		elseif from.charName == "XinZhao" then
+			baseCriticalDamage = baseCriticalDamage - (0.875 - 0.125 * Utilities:GetSpellLevel(args.From, _W));
+		elseif from.charName == "Yasuo" then
+			percentMod = 0.9;
+		end
+		return baseCriticalDamage * percentMod;
 	end
 
 class "__Utilities"
