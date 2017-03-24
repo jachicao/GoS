@@ -996,7 +996,7 @@ class "__Damage"
 		if from.charName == "Jhin" then
 			percentMod = 0.75;
 		elseif from.charName == "XinZhao" then
-			baseCriticalDamage = baseCriticalDamage - (0.875 - 0.125 * Utilities:GetSpellLevel(args.From, _W));
+			baseCriticalDamage = baseCriticalDamage - (0.875 - 0.125 * Utilities:GetSpellLevel(from, _W));
 		elseif from.charName == "Yasuo" then
 			percentMod = 0.9;
 		end
