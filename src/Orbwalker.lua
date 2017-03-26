@@ -1673,7 +1673,7 @@ class "__ObjectManager"
 		local result = {};
 		for i = 1, LocalGameWardCount() do
 			local minion = LocalGameWard(i);
-			if Utilities:IsValidTarget(minion) andself:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
+			if Utilities:IsValidTarget(minion) and self:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
 				if Utilities:IsInRange(myHero, minion, range) then
 					Linq:Add(result, minion);
 				end
