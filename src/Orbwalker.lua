@@ -2577,7 +2577,7 @@ class "__Orbwalker"
 			["Camille"] = { Slot = _Q },
 			["Darius"] = { Slot = _W },
 			["DrMundo"] = { Slot = _E },
-			["Elise"] = { Slot = _W },
+			["Elise"] = { Slot = _W, Name = "EliseSpiderW"},
 			["Fiora"] = { Slot = _E },
 			["Gangplank"] = { Slot = _Q },
 			["Garen"] = { Slot = _Q },
