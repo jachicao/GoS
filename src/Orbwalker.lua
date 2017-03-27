@@ -1804,12 +1804,14 @@ class "__HealthPrediction"
 		self.IncomingAttacks = {}; -- networkID => [__IncomingAttack]
 		self.AlliesState = {}; -- networkID => state
 		self.AlliesTarget = {}; -- handle => boolean
+		self.AlliesWithoutTarget = 0;
 		LocalCallbackAdd('Tick', function()
 			self:OnTick();
 		end);
 	end
 
 	function __HealthPrediction:OnTick()
+		self.AlliesWithoutTarget = 0;
 		local newAlliesState = {};
 		local newAlliesTarget = {};
 		local t = ObjectManager:GetAllyMinions(1500);
@@ -3055,7 +3057,7 @@ class "__Orbwalker"
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
 		local endTime = Utilities:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
-		if LocalGameTimer() - endTime + 0.03 >= 0 then
+		if LocalGameTimer() - endTime >= 0 then
 			return false;
 		end
 		return true;
@@ -3106,7 +3108,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetIssueOrderDelay()
-		return Utilities:GetLatency() * 1.5 - 0.005;
+		return Utilities:GetLatency() * 1.5 + 0.05;
 	end
 
 	function __Orbwalker:CanAttackTime(unit)
