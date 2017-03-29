@@ -2461,6 +2461,7 @@ class "__Orbwalker"
 
 		self.EnemyStructures = {};
 
+		self.AutoAttackSent = false;
 		self.LastAutoAttackSent = 0;
 		self.LastMovementSent = 0;
 		self.LastShouldWait = 0;
@@ -2841,6 +2842,7 @@ class "__Orbwalker"
 		--print(tostring(LocalGameTimer() - self.LastAutoAttackSent));
 		self.FastKiting = true;
 		self.AutoAttackResetted = false;
+		self.AutoAttackSent = false;
 		for i = 1, #self.OnAttackCallbacks do
 			self.OnAttackCallbacks[i]();
 		end
@@ -2870,15 +2872,14 @@ class "__Orbwalker"
 				if args.Process and args.Target ~= nil then
 					local boolean = _G.Control.Attack(args.Target);
 					if boolean == nil or boolean == true then
+						self.AutoAttackSent = true;
 						self.LastAutoAttackSent = LocalGameTimer();
 						self.HoldPosition = nil;
+						--print("AutoAttack Sent: " .. self.LastAutoAttackSent);
 					end
 					return;
 				end
 			end
-		end
-		if LocalGameTimer() - self.LastAutoAttackSent <= 0.2 then
-			--return;
 		end
 		self:Move();
 	end
@@ -2967,6 +2968,7 @@ class "__Orbwalker"
 				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
+		--LocalDrawText("CanMove: " .. tostring(self:CanMove()) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", IsWaitingResponseFromServer: " .. tostring(self:IsWaitingResponseFromServer()), myHero.pos:To2D())
 		--[[
 		local minions = {};
 		local t = ObjectManager:GetEnemyHeroes(1500);
@@ -3057,18 +3059,18 @@ class "__Orbwalker"
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
 		local endTime = Utilities:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
-		if LocalGameTimer() - endTime >= 0 then
+		if LocalGameTimer() - endTime + self:GetMovementOrderDelay() >= 0 then
 			return false;
 		end
 		return true;
 	end
 
 	function __Orbwalker:GetMaximumIssueOrderDelay()
-		return LocalMathMax(self:GetIssueOrderDelay(), 0.15);
+		return LocalMathMax(self:GetAttackOrderDelay(), 0.15);
 	end
 
 	function __Orbwalker:IsWaitingResponseFromServer()
-		return LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay();
+		return self.AutoAttackSent and LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay();
 	end
 	
 	function __Orbwalker:CanMove(unit)
@@ -3107,13 +3109,17 @@ class "__Orbwalker"
 		return self:CanIssueOrder(unit);
 	end
 
-	function __Orbwalker:GetIssueOrderDelay()
+	function __Orbwalker:GetMovementOrderDelay()
+		return Utilities:GetLatency() * 1.5 - 0.02;
+	end
+
+	function __Orbwalker:GetAttackOrderDelay()
 		return Utilities:GetLatency() * 1.5 + 0.05;
 	end
 
 	function __Orbwalker:CanAttackTime(unit)
 		unit = self:GetUnit(unit);
-		return LocalGameTimer() - Utilities:GetAttackDataEndTime(unit) + self:GetIssueOrderDelay();
+		return LocalGameTimer() - Utilities:GetAttackDataEndTime(unit) + self:GetAttackOrderDelay();
 	end
 
 	function __Orbwalker:CanIssueOrder(unit)
