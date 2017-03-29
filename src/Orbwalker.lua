@@ -3110,7 +3110,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetMovementOrderDelay()
-		return Utilities:GetLatency() * 1.5 - 0.05;
+		return LocalMathMax(Utilities:GetLatency() * 1.5 - 0.07, 0);
 	end
 
 	function __Orbwalker:GetAttackOrderDelay()
