@@ -3429,7 +3429,7 @@ class "__Orbwalker"
 				local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
 				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
-				orbwalkerMinion.LaneClearTime = windUpTime + self:GetAnimationTime(myHero, minion) + maxMissileTravelTime;
+				orbwalkerMinion.LaneClearTime = windUpTime + self:GetAnimationTime(myHero, minion) + maxMissileTravelTime + 0.1;
 				Minions[minion.handle] = orbwalkerMinion;
 			end
 		end
