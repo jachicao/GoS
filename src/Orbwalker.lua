@@ -85,6 +85,7 @@ local LocalControlMouseEvent		= Control.mouse_event;
 local LocalControlSetCursorPos		= Control.SetCursorPos;
 local LocalControlKeyUp				= Control.KeyUp;
 local LocalControlKeyDown			= Control.KeyDown;
+local LocalGameCanUseSpell			= Game.CanUseSpell;
 local LocalGameLatency				= Game.Latency;
 local LocalGameTimer				= Game.Timer;
 local LocalGameHeroCount 			= Game.HeroCount;
@@ -2873,6 +2874,9 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:__OnAutoAttackReset()
+		if myHero.charName == "Vayne" and BuffManager:HasBuff(myHero, "vaynetumblebonus") then
+			return;
+		end
 		--print("Resetted")
 		self.AutoAttackResetted = true;
 		self.LastAutoAttackSent = 0;
