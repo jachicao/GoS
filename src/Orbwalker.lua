@@ -1208,12 +1208,27 @@ class "__Utilities"
 			["BlueCardPreAttack"] = true,
 			["RedCardPreAttack"] = true,
 			["GoldCardPreAttack"] = true,
-		}
+		};
 
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
 			self.SpecialMelees[charName] = function(target) return true end;
 		end
+
+		self.MinionsRange = {};
+		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
+			self.MinionsRange[ObjectManager.MinionTypesDictionary["Melee"][i]] = 110;
+		end
+		for i = 1, #ObjectManager.MinionTypesDictionary["Ranged"] do
+			self.MinionsRange[ObjectManager.MinionTypesDictionary["Ranged"][i]] = 550;
+		end
+		for i = 1, #ObjectManager.MinionTypesDictionary["Siege"] do
+			self.MinionsRange[ObjectManager.MinionTypesDictionary["Siege"][i]] = 300;
+		end
+		for i = 1, #ObjectManager.MinionTypesDictionary["Super"] do
+			self.MinionsRange[ObjectManager.MinionTypesDictionary["Super"][i]] = 170;
+		end
+
 		self.BaseTurrets = {
 			["SRUAP_Turret_Order3"] = true,
 			["SRUAP_Turret_Order4"] = true,
@@ -1288,16 +1303,17 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetAutoAttackRange(from, target)
+		local range = from.range;
 		if from.type == Obj_AI_Minion then
-			return 0;
+			range = self.MinionsRange[from.charName] ~= nil and self.MinionsRange[from.charName] or 0;
 		elseif from.type == Obj_AI_Turret then
 			return 775;
 		end
-		local range = from.range + from.boundingRadius + (target ~= nil and (target.boundingRadius - 30) or 35);
+		local result = range + from.boundingRadius + (target ~= nil and (target.boundingRadius - 30) or 35);
 		if self.SpecialAutoAttackRanges[from.charName] ~= nil then
-			range = range + self.SpecialAutoAttackRanges[from.charName](from, target);
+			result = result + self.SpecialAutoAttackRanges[from.charName](from, target);
 		end
-		return range;
+		return result;
 	end
 
 	function __Utilities:IsMelee(unit)
@@ -1512,7 +1528,7 @@ class "__Utilities"
 
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
-			if unit.activeSpell.target > 0 then
+			if self:GetSpellTarget(unit) > 0 then
 				if not unit.isChanneling then
 					return true;
 				else
@@ -1532,6 +1548,11 @@ class "__Utilities"
 		end
 		return false;
 	end
+
+	function __Utilities:GetSpellTarget(unit)
+		return unit.activeSpell.target;
+	end
+
 
 	function __Utilities:GetSpellWindUpTime(unit)
 		if self.DisableSpellWindUpTime[unit.charName] then
@@ -1825,25 +1846,36 @@ class "__HealthPrediction"
 	function __HealthPrediction:__init()
 		self.IncomingAttacks = {}; -- networkID => [__IncomingAttack]
 		self.AlliesState = {}; -- networkID => state
-		self.AlliesTarget = {}; -- handle => boolean
-		self.AlliesWithoutTarget = 0;
+		self.AlliesSearchingTargetDamage = {}; -- networkID => number
 		LocalCallbackAdd('Tick', function()
 			self:OnTick();
 		end);
 	end
 
 	function __HealthPrediction:OnTick()
-		self.AlliesWithoutTarget = 0;
 		local newAlliesState = {};
-		local newAlliesTarget = {};
+		local newAlliesSearchingTargetDamage = {};
+		local enemyMinions = nil;
 		local t = ObjectManager:GetAllyMinions(1500);
 		for i = 1, #t do
 			local minion = t[i];
 			self:CheckNewState(minion);
 			newAlliesState[minion.networkID] = Utilities:GetAttackDataState(minion);
-			local target = Utilities:GetAttackDataTarget(minion);
-			if target ~= nil and target > 0 then
-				newAlliesTarget[target] = true;
+			if not Utilities:IsAutoAttacking(minion) then
+				if enemyMinions == nil then
+					enemyMinions = ObjectManager:GetEnemyMinions(1500);
+				end
+				for j = 1, #enemyMinions do
+					local enemyMinion = enemyMinions[j];
+					local range = Utilities:GetAutoAttackRange(minion, enemyMinion) + 250;
+					if Utilities:GetDistanceSquared(minion, enemyMinion) <= range * range then
+						local target = enemyMinion.networkID;
+						if newAlliesSearchingTargetDamage[target] == nil then
+							newAlliesSearchingTargetDamage[target] = 0;
+						end
+						newAlliesSearchingTargetDamage[target] = newAlliesSearchingTargetDamage[target] + Damage:GetAutoAttackDamage(minion, enemyMinion);
+					end
+				end
 			end
 		end
 		local t = ObjectManager:GetAllyTurrets(1500);
@@ -1851,13 +1883,9 @@ class "__HealthPrediction"
 			local turret = t[i];
 			self:CheckNewState(turret);
 			newAlliesState[turret.networkID] = Utilities:GetAttackDataState(turret);
-			local target = Utilities:GetAttackDataTarget(turret);
-			if target ~= nil and target > 0 then
-				newAlliesTarget[target] = true;
-			end
 		end
 		self.AlliesState = newAlliesState;
-		self.AlliesTarget = newAlliesTarget;
+		self.AlliesSearchingTargetDamage = newAlliesSearchingTargetDamage;
 		local removeFromIncomingAttacks = {};
 		local removeFromAttacks = {};
 		-- remove older attacks
@@ -1978,7 +2006,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() - 0.1;
+			delay = delay + Utilities:GetLatency() * 1.5 - 0.1;
 			local CurrentTime = LocalGameTimer();
 			local timeTillHit = self:GetArrivalTime(target) - CurrentTime;
 			if timeTillHit < 0 then
@@ -3411,7 +3439,7 @@ class "__Orbwalker"
 					local attack = attacks[i];
 					local minion = Minions[attack.TargetHandle];
 					if minion ~= nil then
-						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, true);
+						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, false);
 						minion.LaneClearHealth = minion.LaneClearHealth - attack:GetPredictedDamage(minion.Minion, minion.LaneClearTime, true);
 					end
 				end
@@ -3527,7 +3555,11 @@ class "__OrbwalkerMinion"
 	function __OrbwalkerMinion:__init(minion)
 		self.Minion = minion;
 		self.LastHitHealth = self.Minion.health;
-		self.LaneClearHealth = self.Minion.health;
+		local damage = 0;
+		if HealthPrediction.AlliesSearchingTargetDamage[self.Minion.networkID] ~= nil then
+			damage = HealthPrediction.AlliesSearchingTargetDamage[self.Minion.networkID];
+		end
+		self.LaneClearHealth = self.Minion.health - damage;
 		self.LastHitTime = 0;
 		self.LaneClearTime = 0;
 	end
@@ -3541,23 +3573,15 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsAlmostLastHittable()
-		if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < EPSILON then
-			return false;
-		end
 		local health = (false) --[[TODO]] and self.LastHitHealth or self.LaneClearHealth;
 		local percentMod = Utilities:IsSiegeMinion(self.Minion) and 1.5 or 1;
-		return health <= percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
+		return health < self.Minion.health and health <= percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
 	function __OrbwalkerMinion:IsLaneClearable()
 		if Orbwalker.OnlyLastHit then
 			return false;
 		end
-		--[[
-			if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < 1E-12 then
-				return true;
-			end
-		]]
 		if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < EPSILON then
 			return true;
 		end
