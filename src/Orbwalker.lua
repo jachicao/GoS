@@ -1203,7 +1203,10 @@ class "__Utilities"
 		};
 
 		self.SpecialAutoAttacks = {
-			["CaitlynHeadshotMissile"] = true
+			["CaitlynHeadshotMissile"] = true,
+			["BlueCardPreAttack"] = true,
+			["RedCardPreAttack"] = true,
+			["GoldCardPreAttack"] = true,
 		}
 
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
@@ -1247,6 +1250,9 @@ class "__Utilities"
 		self.DisableSpellWindUpTime = {
 			["Kalista"] = true,
 			["Thresh"] = true,
+		};
+		self.DisableSpellAnimationTime = {
+			["TwistedFate"] = true,
 		};
 		self.Slots = {
 			_Q,
@@ -1509,8 +1515,7 @@ class "__Utilities"
 				if not unit.isChanneling then
 					return true;
 				else
-					local name = self:GetActiveSpellName(unit);
-					if name and self.SpecialAutoAttacks[name] ~= nil then
+					if self.SpecialAutoAttacks[self:GetActiveSpellName(unit)] ~= nil then
 						return true;
 					end
 				end
@@ -1535,6 +1540,9 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetSpellAnimationTime(unit)
+		if self.DisableSpellAnimationTime[unit.charName] then
+			return self:GetAttackDataAnimationTime(unit);
+		end
 		return unit.activeSpell.animation;
 	end
 
@@ -2488,7 +2496,14 @@ class "__Orbwalker"
 		self.MyHeroEndTime = 0;
 		self.CustomEndTime = 0;
 		self.SpecialAutoAttacks = {
-			["Caitlyn"] = { ["CaitlynHeadshotMissile"] = true }
+			["Caitlyn"] = { 
+				["CaitlynHeadshotMissile"] = true 
+			},
+			["TwistedFate"] = {
+				["BlueCardPreAttack"] = true,
+				["RedCardPreAttack"] = true,
+				["GoldCardPreAttack"] = true,
+			},
 		}
 
 		self.MyHeroAttacks = {};
