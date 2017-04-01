@@ -1186,6 +1186,7 @@ class "__Utilities"
 			["Velkoz"] = function(unit) return true end,
 			["Viktor"] = function(unit) return BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") end,
 		};
+
 		self.UndyingBuffs = {
 			["Aatrox"] = function(target, addHealthCheck)
 				return BuffManager:HasBuff(target, "aatroxpassivedeath");
@@ -1200,6 +1201,10 @@ class "__Utilities"
 				return BuffManager:HasBuff(target, "VladimirSanguinePool");
 			end,
 		};
+
+		self.SpecialAutoAttacks = {
+			["CaitlynHeadshotMissile"] = true
+		}
 
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
@@ -1351,7 +1356,7 @@ class "__Utilities"
 		if b.pos ~= nil then
 			b = b.pos;
 		end
-		if a.z and b.z then
+		if a.z ~= nil and b.z ~= nil then
 			if includeY then
 				local x = (a.x - b.x);
 				local y = (a.y - b.y);
@@ -1501,7 +1506,14 @@ class "__Utilities"
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
 			if unit.activeSpell.target > 0 then
-				return not unit.isChanneling;
+				if not unit.isChanneling then
+					return true;
+				else
+					local name = self:GetActiveSpellName(unit);
+					if name and self.SpecialAutoAttacks[name] ~= nil then
+						return true;
+					end
+				end
 			end
 		end
 		return false;
@@ -1509,6 +1521,7 @@ class "__Utilities"
 
 	function __Utilities:IsCastingSpell(unit)
 		if self:IsWindingUp(unit) then
+			--return not self:IsAutoAttacking(unit);
 			return unit.isChanneling;
 		end
 		return false;
@@ -1529,7 +1542,7 @@ class "__Utilities"
 		return unit.activeSpellSlot;
 	end
 
-	function __Utilities:GetActiveSpellName(unit, slot)
+	function __Utilities:GetActiveSpellName(unit)
 		return unit.activeSpell.name;
 	end
 
@@ -2353,7 +2366,7 @@ class "__TargetSelector"
 				local t = ObjectManager:GetEnemyHeroes();
 				for i = 1, #t do
 					local hero = t[i];
-					if Utilities:IsInRange(hero.pos:To2D(), _G.cursorPos, 100) then
+					if Utilities:IsInRange(hero.pos, _G.mousePos, 100) then
 						self.SelectedTarget = hero;
 						break;
 					end
@@ -2472,7 +2485,11 @@ class "__Orbwalker"
 		self.OnlyLastHit = false;
 
 		self.MyHeroIsAutoAttacking = false;
-		self.MyHeroState = STATE_ATTACK;
+		self.MyHeroEndTime = 0;
+		self.CustomEndTime = 0;
+		self.SpecialAutoAttacks = {
+			["Caitlyn"] = { ["CaitlynHeadshotMissile"] = true }
+		}
 
 		self.MyHeroAttacks = {};
 
@@ -2764,11 +2781,23 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnUpdate()
+
+		local IsAutoAttacking = self:IsAutoAttacking();
+
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
 			self.SpellWindUpTime = Utilities:GetSpellWindUpTime(myHero);
 			self.AttackDataAnimationTime = Utilities:GetAttackDataAnimationTime(myHero);
 			self.SpellAnimationTime = Utilities:GetSpellAnimationTime(myHero);
+		end
+
+		local SpecialAutoAttacks = self.SpecialAutoAttacks[myHero.charName];
+		if SpecialAutoAttacks ~= nil then
+			if Utilities:IsCastingSpell(myHero) and SpecialAutoAttacks[Utilities:GetActiveSpellName(myHero)] ~= nil then
+				if self.CustomEndTime < LocalGameTimer() then
+					self.CustomEndTime = LocalGameTimer() + self.SpellAnimationTime;
+				end
+			end
 		end
 
 		local AutoAttackReset = self.AutoAttackResets[myHero.charName];
@@ -2784,16 +2813,12 @@ class "__Orbwalker"
 				self.AutoAttackResetCastTime = castTime;
 			end
 		end
-
-		local state = Utilities:GetAttackDataState(myHero);
-		if state == STATE_WINDUP then
-			if self.MyHeroState ~= STATE_WINDUP then
-				self:__OnAttack();
-			end
+		local endTime = self:GetAttackDataEndTime(myHero);
+		if self.MyHeroEndTime < endTime then
+			self:__OnAttack();
 		end
-		self.MyHeroState = state;
+		self.MyHeroEndTime = endTime;
 
-		local IsAutoAttacking = self:IsAutoAttacking();
 		if not IsAutoAttacking then
 			if self.MyHeroIsAutoAttacking then
 				self:__OnPostAttack();
@@ -2833,6 +2858,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:__OnAutoAttackReset()
+		--print("Resetted")
 		self.AutoAttackResetted = true;
 		self.LastAutoAttackSent = 0;
 	end
@@ -2968,6 +2994,7 @@ class "__Orbwalker"
 				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
+		--LocalDrawText(self.CustomEndTime .. " " .. self:GetAttackDataEndTime(), myHero.pos:To2D())
 		--LocalDrawText("CanMove: " .. tostring(self:CanMove()) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", IsWaitingResponseFromServer: " .. tostring(self:IsWaitingResponseFromServer()), myHero.pos:To2D())
 		--[[
 		local minions = {};
@@ -3052,13 +3079,24 @@ class "__Orbwalker"
 		return (unit ~= nil) and unit or myHero;
 	end
 
+	function __Orbwalker:GetAttackDataEndTime(unit)
+		unit = self:GetUnit(unit);
+		local endTime = Utilities:GetAttackDataEndTime(unit);
+		if unit.isMe then
+			if self.CustomEndTime > endTime then
+				return self.CustomEndTime;
+			end
+		end
+		return endTime;
+	end
+
 	function __Orbwalker:IsAutoAttacking(unit)
 		unit = self:GetUnit(unit);
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
-		local endTime = Utilities:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
+		local endTime = self:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
 		if LocalGameTimer() - endTime + self:GetMovementOrderDelay() >= 0 then
 			return false;
 		end
@@ -3110,7 +3148,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetMovementOrderDelay()
-		return LocalMathMax(Utilities:GetLatency() * 1.5 - 0.07, 0);
+		return LocalMathMax(Utilities:GetLatency() * 1.5 - 0.09, 0);
 	end
 
 	function __Orbwalker:GetAttackOrderDelay()
@@ -3119,7 +3157,7 @@ class "__Orbwalker"
 
 	function __Orbwalker:CanAttackTime(unit)
 		unit = self:GetUnit(unit);
-		return LocalGameTimer() - Utilities:GetAttackDataEndTime(unit) + self:GetAttackOrderDelay();
+		return LocalGameTimer() - self:GetAttackDataEndTime(unit) + self:GetAttackOrderDelay();
 	end
 
 	function __Orbwalker:CanIssueOrder(unit)
