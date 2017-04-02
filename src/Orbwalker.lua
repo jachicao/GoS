@@ -77,6 +77,7 @@ _G.SDK = {
 local LocalVector					= Vector;
 local LocalCallbackAdd				= Callback.Add;
 local LocalCallbackDel				= Callback.Del;
+local LocalDrawLine					= Draw.Line;
 local LocalDrawColor				= Draw.Color;
 local LocalDrawCircle				= Draw.Circle;
 local LocalDrawText					= Draw.Text;
@@ -1514,10 +1515,6 @@ class "__Utilities"
 		return unit.levelData.lvl;
 	end
 
-	function __Utilities:GetDamageDelay()
-		return 0.03;
-	end
-
 	function __Utilities:IsWindingUp(unit)
 		return unit.activeSpell.valid;
 	end
@@ -1865,15 +1862,40 @@ class "__HealthPrediction"
 				if enemyMinions == nil then
 					enemyMinions = ObjectManager:GetEnemyMinions(1500);
 				end
+				--[[
+				local nearestMinion = nil;
+				local nearestDistance = LocalMathHuge;
 				for j = 1, #enemyMinions do
 					local enemyMinion = enemyMinions[j];
+					local distance = Utilities:GetDistanceSquared(minion.posTo, enemyMinion);
+					if nearestDistance > distance then
+						nearestMinion = enemyMinion;
+						nearestDistance = distance;
+					end
+				end
+				if nearestMinion ~= nil then
+					local enemyMinion = nearestMinion;
+					local distance = Utilities:GetDistanceSquared(minion.posTo, enemyMinion);
 					local range = Utilities:GetAutoAttackRange(minion, enemyMinion) + 250;
-					if Utilities:GetDistanceSquared(minion, enemyMinion) <= range * range then
+					if distance <= range * range then
 						local target = enemyMinion.networkID;
 						if newAlliesSearchingTargetDamage[target] == nil then
 							newAlliesSearchingTargetDamage[target] = 0;
 						end
 						newAlliesSearchingTargetDamage[target] = newAlliesSearchingTargetDamage[target] + Damage:GetAutoAttackDamage(minion, enemyMinion);
+					end
+				end
+				]]
+				for j = 1, #enemyMinions do
+					local enemyMinion = enemyMinions[j];
+					local range = Utilities:GetAutoAttackRange(minion, enemyMinion) + 100;
+					local distance = Utilities:GetDistanceSquared(minion.posTo, enemyMinion);
+					if distance <= range * range then
+						local target = enemyMinion.networkID;
+						if newAlliesSearchingTargetDamage[target] == nil then
+							newAlliesSearchingTargetDamage[target] = 0;
+						end
+						newAlliesSearchingTargetDamage[target] = newAlliesSearchingTargetDamage[target] + 2 * Damage:GetAutoAttackDamage(minion, enemyMinion);
 					end
 				end
 			end
@@ -1988,7 +2010,7 @@ class "__IncomingAttack"
 	end
 
 	function __IncomingAttack:GetArrivalTime(target)
-		return self.StartTime + self.WindUpTime + self:GetMissileTime(target) + Utilities:GetDamageDelay();
+		return self.StartTime + self.WindUpTime + self:GetMissileTime(target);
 	end
 
 	function __IncomingAttack:GetMissileCreationTime()
@@ -2006,7 +2028,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() * 1.5 - 0.1;
+			delay = delay + Utilities:GetLatency() * 1.5 - 0.03;
 			local CurrentTime = LocalGameTimer();
 			local timeTillHit = self:GetArrivalTime(target) - CurrentTime;
 			if timeTillHit < 0 then
@@ -3420,12 +3442,11 @@ class "__Orbwalker"
 		local Minions = {};
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		local ExtraFarmDelay = self.Menu.Farming.ExtraFarmDelay:Value() * 0.001;
-		local DamageDelay = Utilities:GetDamageDelay();
 		local boundingRadius = 0;--myHero.boundingRadius;
 		for i = 1, #EnemyMinionsInRange do
 			local minion = EnemyMinionsInRange[i];
 			if Utilities:IsInRange(myHero, minion, 1500) then
-				local windUpTime = self:GetWindUpTime(myHero, minion) + DamageDelay + ExtraFarmDelay;
+				local windUpTime = self:GetWindUpTime(myHero, minion) + ExtraFarmDelay;
 				local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
 				orbwalkerMinion.LastHitTime = windUpTime + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
@@ -3439,7 +3460,7 @@ class "__Orbwalker"
 					local attack = attacks[i];
 					local minion = Minions[attack.TargetHandle];
 					if minion ~= nil then
-						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, false);
+						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, true);
 						minion.LaneClearHealth = minion.LaneClearHealth - attack:GetPredictedDamage(minion.Minion, minion.LaneClearTime, true);
 					end
 				end
