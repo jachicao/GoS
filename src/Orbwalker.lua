@@ -116,6 +116,13 @@ local _Q							= _Q;
 local _W							= _W;
 local _E							= _E;
 local _R							= _R;
+local READY 						= READY
+local NOTAVAILABLE					= NOTAVAILABLE;
+local READYNOCAST					= READYNOCAST;
+local NOTLEARNED					= NOTLEARNED;
+local ONCOOLDOWN					= ONCOOLDOWN;
+local NOMANA 						= NOMANA;
+local NOMANAONCOOLDOWN				= NOMANAONCOOLDOWN;
 local MOUSEEVENTF_LEFTDOWN			= MOUSEEVENTF_LEFTDOWN;
 local MOUSEEVENTF_LEFTUP			= MOUSEEVENTF_LEFTUP;
 local MOUSEEVENTF_RIGHTDOWN			= MOUSEEVENTF_RIGHTDOWN;
@@ -1508,7 +1515,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:GetSpellLevel(unit, slot)
-		return unit:GetSpellData(slot).level;
+		return self:GetSpellDataFromSlot(unit, slot).level;
 	end
 
 	function __Utilities:GetLevel(unit)
@@ -1615,13 +1622,18 @@ class "__Utilities"
 	function __Utilities:GetSlotFromName(unit, name)
 		for i = 1, #self.Slots do
 			local slot = self.Slots[i];
-			local spellData = unit:GetSpellData(slot);
+			local spellData = self:GetSpellDataFromSlot(unit, slot);
 			if spellData ~= nil and spellData.name == name then
 				return slot;
 			end
 		end
 		return nil;
 	end
+
+	function __Utilities:GetSpellDataFromSlot(unit, slot)
+		return unit:GetSpellData(slot);
+	end
+
 
 class "__Linq"
 	function __Linq:__init()
@@ -1842,7 +1854,7 @@ class "__ObjectManager"
 class "__HealthPrediction"
 	function __HealthPrediction:__init()
 		self.IncomingAttacks = {}; -- networkID => [__IncomingAttack]
-		self.AlliesState = {}; -- networkID => state
+		self.AlliesEndTime = {} -- networkID => number
 		self.AlliesSearchingTargetDamage = {}; -- networkID => number
 		LocalCallbackAdd('Tick', function()
 			self:OnTick();
@@ -1850,19 +1862,24 @@ class "__HealthPrediction"
 	end
 
 	function __HealthPrediction:OnTick()
-		local newAlliesState = {};
+		local newAlliesEndTime = {};
 		local newAlliesSearchingTargetDamage = {};
 		local enemyMinions = nil;
 		local t = ObjectManager:GetAllyMinions(1500);
 		for i = 1, #t do
 			local minion = t[i];
-			self:CheckNewState(minion);
-			newAlliesState[minion.networkID] = Utilities:GetAttackDataState(minion);
+			local currentEndTime = Utilities:GetAttackDataEndTime(minion);
+			local prevEndTime = self.AlliesEndTime[minion.networkID];
+			if prevEndTime ~= nil then
+				if prevEndTime < currentEndTime then
+					self:OnBasicAttack(minion);
+				end
+			end
+			newAlliesEndTime[minion.networkID] = currentEndTime;
 			if not Utilities:IsAutoAttacking(minion) then
 				if enemyMinions == nil then
 					enemyMinions = ObjectManager:GetEnemyMinions(1500);
 				end
-				--[[
 				local nearestMinion = nil;
 				local nearestDistance = LocalMathHuge;
 				for j = 1, #enemyMinions do
@@ -1885,7 +1902,7 @@ class "__HealthPrediction"
 						newAlliesSearchingTargetDamage[target] = newAlliesSearchingTargetDamage[target] + Damage:GetAutoAttackDamage(minion, enemyMinion);
 					end
 				end
-				]]
+				--[[
 				for j = 1, #enemyMinions do
 					local enemyMinion = enemyMinions[j];
 					local range = Utilities:GetAutoAttackRange(minion, enemyMinion) + 100;
@@ -1898,16 +1915,23 @@ class "__HealthPrediction"
 						newAlliesSearchingTargetDamage[target] = newAlliesSearchingTargetDamage[target] + 2 * Damage:GetAutoAttackDamage(minion, enemyMinion);
 					end
 				end
+				]]
 			end
 		end
 		local t = ObjectManager:GetAllyTurrets(1500);
 		for i = 1, #t do
 			local turret = t[i];
-			self:CheckNewState(turret);
-			newAlliesState[turret.networkID] = Utilities:GetAttackDataState(turret);
+			local currentEndTime = Utilities:GetAttackDataEndTime(turret);
+			local prevEndTime = self.AlliesEndTime[turret.networkID];
+			if prevEndTime ~= nil then
+				if prevEndTime < currentEndTime then
+					self:OnBasicAttack(turret);
+				end
+			end
+			newAlliesEndTime[turret.networkID] = currentEndTime;
 		end
-		self.AlliesState = newAlliesState;
 		self.AlliesSearchingTargetDamage = newAlliesSearchingTargetDamage;
+		self.AlliesEndTime = newAlliesEndTime;
 		local removeFromIncomingAttacks = {};
 		local removeFromAttacks = {};
 		-- remove older attacks
@@ -1931,15 +1955,6 @@ class "__HealthPrediction"
 		end
 	end
 
-	function __HealthPrediction:CheckNewState(unit)
-		local currentState = Utilities:GetAttackDataState(unit);
-		local prevState = self.AlliesState[unit.networkID];
-		if prevState ~= nil then
-			if prevState ~= STATE_WINDUP and currentState == STATE_WINDUP then
-				self:OnBasicAttack(unit);
-			end
-		end
-	end
 
 	function __HealthPrediction:OnBasicAttack(sender)
 		local target = Utilities:GetAttackDataTarget(sender);
@@ -2006,7 +2021,7 @@ class "__IncomingAttack"
 		if self.SourceIsMelee then
 			return 0;
 		end
-		return LocalMathMax(Utilities:GetDistance(self.SourcePosition, target, true) - self.boundingRadius, 0) / self.MissileSpeed;
+		return LocalMathMax(Utilities:GetDistance(self.SourcePosition, target) - self.boundingRadius, 0) / self.MissileSpeed;
 	end
 
 	function __IncomingAttack:GetArrivalTime(target)
@@ -2247,7 +2262,7 @@ class "__TargetSelector"
 			["Darius"]		= { "DariusHemo" },
 			["Ekko"]		= { "EkkoStacks" },
 			["Gnar"]		= { "GnarWProc" },
-			["Kalista"]		= { "KalistaExpungeMarker" },
+			["Kalista"]		= { "kalistaexpungemarker" },
 			["Kennen"]		= { "kennenmarkofstorm" },
 			["Kindred"]		= { "KindredHitCharge", "kindredecharge" },
 			["TahmKench"]	= { "tahmkenchpdebuffcounter" },
@@ -2848,8 +2863,6 @@ class "__Orbwalker"
 
 	function __Orbwalker:OnUpdate()
 
-		local IsAutoAttacking = self:IsAutoAttacking();
-
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
 			self.SpellWindUpTime = Utilities:GetSpellWindUpTime(myHero);
@@ -2868,11 +2881,12 @@ class "__Orbwalker"
 
 		local AutoAttackReset = self.AutoAttackResets[myHero.charName];
 		if AutoAttackReset ~= nil then
-			local castTime = myHero:GetSpellData(AutoAttackReset.Slot).castTime;
+			local spellData = Utilities:GetSpellDataFromSlot(myHero, AutoAttackReset.Slot);
+			local castTime = spellData.castTime;
 			if castTime > self.AutoAttackResetCastTime then
 				if self.AutoAttackResetCastTime > 0 then
 					local name = AutoAttackReset["Name"];
-					if name == nil or name == myHero:GetSpellData(AutoAttackReset.Slot).name then
+					if name == nil or name == spellData.name then
 						self:__OnAutoAttackReset();
 					end
 				end
@@ -2885,6 +2899,8 @@ class "__Orbwalker"
 		end
 		self.MyHeroEndTime = endTime;
 
+
+		local IsAutoAttacking = self:IsAutoAttacking();
 		if not IsAutoAttacking then
 			if self.MyHeroIsAutoAttacking then
 				self:__OnPostAttack();
@@ -2892,13 +2908,6 @@ class "__Orbwalker"
 		end
 		self.MyHeroIsAutoAttacking = IsAutoAttacking;
 
-
-		if (not self.IsNone) then
-			self:Orbwalk();
-		end
-	end
-
-	function __Orbwalker:OnTick()
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
@@ -2917,15 +2926,24 @@ class "__Orbwalker"
 				self:CalculateLastHittableMinions();
 			end
 		end
+
+		if (not self.IsNone) then
+			self:Orbwalk();
+		end
 		if self.LastHoldPosition > 0 and LocalGameTimer() - self.LastHoldPosition > 0.025 then
 			LocalControlKeyUp(72);
 			self.LastHoldPosition = 0;
 		end
 	end
 
+	function __Orbwalker:OnTick()
+	end
+
 	function __Orbwalker:__OnAutoAttackReset()
-		if myHero.charName == "Vayne" and BuffManager:HasBuff(myHero, "vaynetumblebonus") then
-			return;
+		if myHero.charName == "Vayne" then
+			if LocalGameCanUseSpell(_Q) ~= READY or BuffManager:HasBuff(myHero, "vaynetumblebonus") then
+				return;
+			end
 		end
 		--print("Resetted")
 		self.AutoAttackResetted = true;
@@ -3161,7 +3179,7 @@ class "__Orbwalker"
 
 	function __Orbwalker:IsAutoAttacking(unit)
 		unit = self:GetUnit(unit);
-		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
+		local ExtraWindUpTime = self.Loaded and self.Menu.General.ExtraWindUpTime:Value() * 0.001 or 0;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
@@ -3194,6 +3212,8 @@ class "__Orbwalker"
 			if self.AllowMovement[unit.charName] == nil or (not self.AllowMovement[unit.charName](unit)) then
 				return false;
 			end
+		elseif Utilities:IsCastingSpell(unit) then
+			return false;
 		end
 		return not IsAutoAttacking;
 	end
@@ -3201,6 +3221,8 @@ class "__Orbwalker"
 	function __Orbwalker:CanAttack(unit)
 		unit = self:GetUnit(unit);
 		if Utilities:IsChanneling(unit) then
+			return false;
+		elseif Utilities:IsCastingSpell(unit) then
 			return false;
 		end
 		if self.DisableAutoAttack[unit.charName] ~= nil and self.DisableAutoAttack[unit.charName](unit) then
@@ -3460,7 +3482,7 @@ class "__Orbwalker"
 					local attack = attacks[i];
 					local minion = Minions[attack.TargetHandle];
 					if minion ~= nil then
-						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, true);
+						minion.LastHitHealth = minion.LastHitHealth - attack:GetPredictedDamage(minion.Minion, minion.LastHitTime, false);
 						minion.LaneClearHealth = minion.LaneClearHealth - attack:GetPredictedDamage(minion.Minion, minion.LaneClearTime, true);
 					end
 				end
@@ -3586,7 +3608,7 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsUnkillable()
-		return self.LastHitHealth < 0;
+		return self.LastHitHealth <= 0;
 	end
 
 	function __OrbwalkerMinion:IsLastHittable()
@@ -3610,7 +3632,7 @@ class "__OrbwalkerMinion"
 		if false --[[TODO]] then
 			percentMod = percentMod * 2;
 		end
-		return self.LaneClearHealth > percentMod * Orbwalker:GetAutoAttackDamage(self.Minion);
+		return self.LaneClearHealth - percentMod * Orbwalker:GetAutoAttackDamage(self.Minion) > 0;
 	end
 
 
