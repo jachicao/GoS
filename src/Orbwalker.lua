@@ -3693,15 +3693,14 @@ _G.SDK.TargetSelector = TargetSelector;
 _G.SDK.HealthPrediction = HealthPrediction;
 _G.SDK.Orbwalker = Orbwalker;
 
--- Disabling GoS Orbwalker
-if _G.Orbwalker then
-	--_G.Orbwalker.Enabled:Value(false);
-	--_G.Orbwalker.Drawings.Enabled:Value(false);
-	--_G.Orbwalker:Remove();
-	--_G.Orbwalker = nil;
-end
-
 AddLoadCallback(function()
+	-- Disabling GoS Orbwalker
+	if _G.Orbwalker then
+		_G.Orbwalker.Enabled:Value(false);
+		_G.Orbwalker.Drawings.Enabled:Value(false);
+		--_G.Orbwalker:Remove();
+		--_G.Orbwalker = nil;
+	end
 	if _G.EOW then
 		_G.EOW = __EOW();
 	end
