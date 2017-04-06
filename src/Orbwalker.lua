@@ -3695,8 +3695,8 @@ _G.SDK.Orbwalker = Orbwalker;
 
 -- Disabling GoS Orbwalker
 if _G.Orbwalker then
-	_G.Orbwalker.Enabled:Value(false);
-	_G.Orbwalker.Drawings.Enabled:Value(false);
+	--_G.Orbwalker.Enabled:Value(false);
+	--_G.Orbwalker.Drawings.Enabled:Value(false);
 	--_G.Orbwalker:Remove();
 	--_G.Orbwalker = nil;
 end
