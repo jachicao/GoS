@@ -16,6 +16,8 @@
         .ForceTarget -- unit
         .ForceMovement -- Vector
         .Modes[mode: enum] -- if _G.SDK.Orbwalker.Modes[_G.SDK.ORBWALKER_MODE_COMBO] then DoCombo() end
+        :SetMovement(boolean) -- allow or disable movement
+        :SetAttack(boolean) -- allow or disable attacks
         :CanMove(unit or myHero) -- returns a boolean
         :CanAttack(unit or myHero) -- returns a boolean
         :GetTarget() -- returns a unit
@@ -216,62 +218,6 @@ LocalCallbackAdd('Load', function()
 		end
 	end);
 end);
-
-
---[[
-AddLoadCallback(function()
-	LocalCallbackAdd('Tick', function()
-		if _G.Game.CanUseSpell(_Q) == READY then
-			local t = ObjectManager:GetEnemyMinions(1500);
-			for i = 1, #t do
-				_G.Control.CastSpell(HK_Q)
-			end
-		end
-	end);
-end);
-class "__ClickBlocker"
-	function __ClickBlocker:__init()
-		local CLICK_TYPE_CASTSPELL 			= 1;
-		local CLICK_TYPE_ATTACK				= 2;
-		local CLICK_TYPE_MOVE				= 3;
-		local LocalControlCastSpell			= Control.CastSpell;
-		local LocalControlMove				= Control.Move;
-		local LocalControlAttack			= Control.Attack;
-		
-		local NextClick = 0;
-		local LastClickType = -1;
-		_G.Control.CastSpell = function(...)
-			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_CASTSPELL then
-				return nil;
-			end
-			NextClick = LocalGameTimer() + 0.25;
-			LastClickType = CLICK_TYPE_CASTSPELL;
-			return LocalControlCastSpell(...);
-		end
-
-		_G.Control.Attack = function(...)
-			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_ATTACK then
-				return nil;
-			end
-			NextClick = LocalGameTimer() + 0.25;
-			LastClickType = CLICK_TYPE_ATTACK;
-			return LocalControlAttack(...);
-		end
-		
-		_G.Control.Move = function(...)
-			if LocalGameTimer() < NextClick and LastClickType ~= CLICK_TYPE_MOVE then
-				return nil;
-			end
-			NextClick = LocalGameTimer() + 0.25;
-			LastClickType = CLICK_TYPE_MOVE;
-			return LocalControlMove(...);
-		end
-	end
-
-
-]]
-
---__ClickBlocker();
 
 AddLoadCallback(function()
 	local ControlOrder = nil;
@@ -1310,14 +1256,19 @@ class "__Utilities"
 		]]
 	end
 
-	function __Utilities:GetAutoAttackRange(from, target)
+
+	function __Utilities:__GetAutoAttackRange(from)
 		local range = from.range;
 		if from.type == Obj_AI_Minion then
 			range = self.MinionsRange[from.charName] ~= nil and self.MinionsRange[from.charName] or 0;
 		elseif from.type == Obj_AI_Turret then
-			return 775;
+			range = 775;
 		end
-		local result = range + from.boundingRadius + (target ~= nil and (target.boundingRadius - 30) or 35);
+		return range;
+	end
+
+	function __Utilities:GetAutoAttackRange(from, target)
+		local result = self:__GetAutoAttackRange(from) + from.boundingRadius + (target ~= nil and (target.boundingRadius - 30) or 35);
 		if self.SpecialAutoAttackRanges[from.charName] ~= nil then
 			result = result + self.SpecialAutoAttackRanges[from.charName](from, target);
 		end
@@ -1331,11 +1282,7 @@ class "__Utilities"
 		if self.SpecialMelees[unit.charName] ~= nil then
 			return self.SpecialMelees[unit.charName](unit);
 		end
-		if unit.type == Obj_AI_Hero then
-			return unit.range <= 275;
-		else
-			return false;
-		end
+		return self:__GetAutoAttackRange(unit) <= 275;
 	end
 
 	function __Utilities:IsRanged(unit)
@@ -1993,6 +1940,29 @@ class "__HealthPrediction"
 		return health;
 	end
 
+	function __HealthPrediction:GetTurretTarget(turret)
+		local handle = Utilities:GetAttackDataTarget(turret);
+		local minions = {};
+		local t = ObjectManager:GetAllyMinions(1500);
+		for i = 1, #t do
+			local minion = t[i];
+			if Utilities:IsInAutoAttackRange(turret, minion) then
+				if minion.handle == handle then
+					return minion;
+				end
+				Linq:Add(minions, minion);
+			end
+		end
+		LocalTableSort(minions, function(a, b)
+			if a.maxHealth == b.maxHealth then
+				return Utilities:GetDistanceSquared(a, turret) < Utilities:GetDistanceSquared(b, turret);
+			else
+				return a.maxHealth > b.maxHealth;
+			end
+		end);
+		return minions[1];
+	end
+
 class "__IncomingAttack"
 	function __IncomingAttack:__init(source)
 		self.Source = source;
@@ -2005,6 +1975,9 @@ class "__IncomingAttack"
 		self.SourceIsMelee = Utilities:IsMelee(self.Source);
 		self.MissileSpeed = self.SourceIsMelee and LocalMathHuge or Utilities:GetAttackDataProjectileSpeed(self.Source);
 		self.SourcePosition = self.Source.pos;
+		if self.Source.type == Obj_AI_Turret then
+			self.SourcePosition.y = self.SourcePosition + 14;
+		end
 		self.WindUpTime = Utilities:GetAttackDataWindUpTime(self.Source);
 		self.AnimationTime = Utilities:GetAttackDataAnimationTime(self.Source);
 		self.StartTime = Utilities:GetAttackDataEndTime(self.Source) - self.AnimationTime;--LocalGameTimer();
@@ -2475,6 +2448,9 @@ class "__TargetSelector"
 	end
 
 	function __TargetSelector:GetTarget(a, damageType, from, addBoundingRadius)
+		if not self.Loaded then
+			return nil;
+		end
 		if type(a) == "table" then
 			local targets = a;
 			local validTargets = {};
@@ -2539,6 +2515,9 @@ class "__Orbwalker"
 		self.Menu = MenuElement({ id = "IC's Orbwalker 2", name = "IC's Orbwalker", type = MENU });
 
 		self.Loaded = false;
+
+		self.Movement = true;
+		self.Attack = true;
 
 		self.DamageOnMinions = {};
 		self.LastHitMinion = nil;
@@ -2790,7 +2769,7 @@ class "__Orbwalker"
 			end,
 		};
 
-		AddLoadCallback(function()
+		LocalCallbackAdd('Load', function()
 			self:OnLoad();
 		end);
 	end
@@ -2972,7 +2951,7 @@ class "__Orbwalker"
 			return;
 		end
 
-		if self:CanAttack() then
+		if self.Attack and self:CanAttack() then
 			local target = self:GetTarget();
 			if target ~= nil then
 				local args = {
@@ -2998,7 +2977,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:Move()
-		if not self:CanMove() then
+		if (not self.Movement) or (not self:CanMove()) then
 			return;
 		end
 		if LocalGameTimer() - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
@@ -3081,6 +3060,38 @@ class "__Orbwalker"
 				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 		end
+		--[[
+		local enemies = {};
+		local t = ObjectManager:GetEnemyHeroes(1500);
+		for i = 1, #t do
+			local enemy = t[i];
+			enemies[enemy.handle] = enemy;
+		end
+		local t = ObjectManager:GetEnemyMinions(1500);
+		for i = 1, #t do
+			local enemy = t[i];
+			enemies[enemy.handle] = enemy;  
+		end
+		local CurrentTime = LocalGameTimer();
+		local counter = 0;
+		for _, attacks in pairs(HealthPrediction.IncomingAttacks) do
+			if #attacks > 0 then
+				for i = 1, #attacks do
+					local attack = attacks[i];
+					local enemy = enemies[attack.TargetHandle];
+					if enemy then
+						local timeTillHit = attack:GetArrivalTime(enemy) - CurrentTime;
+						if timeTillHit <= 0 then
+							local position = attack.Source.pos:To2D();
+							position.y = position.y + 18 * counter;
+							LocalDrawText(timeTillHit, position);
+							counter = counter + 1;
+						end
+					end
+				end
+			end
+		end
+		]]
 		--LocalDrawText(self.CustomEndTime .. " " .. self:GetAttackDataEndTime(), myHero.pos:To2D())
 		--LocalDrawText("CanMove: " .. tostring(self:CanMove()) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", IsWaitingResponseFromServer: " .. tostring(self:IsWaitingResponseFromServer()), myHero.pos:To2D())
 		--[[
@@ -3213,7 +3224,9 @@ class "__Orbwalker"
 				return false;
 			end
 		elseif Utilities:IsCastingSpell(unit) then
-			return false;
+			if not Utilities:IsAutoAttacking(unit) then
+				return false;
+			end
 		end
 		return not IsAutoAttacking;
 	end
@@ -3223,7 +3236,9 @@ class "__Orbwalker"
 		if Utilities:IsChanneling(unit) then
 			return false;
 		elseif Utilities:IsCastingSpell(unit) then
-			return false;
+			if not Utilities:IsAutoAttacking(unit) then
+				return false;
+			end
 		end
 		if self.DisableAutoAttack[unit.charName] ~= nil and self.DisableAutoAttack[unit.charName](unit) then
 			return false;
@@ -3465,9 +3480,38 @@ class "__Orbwalker"
 		local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
 		local ExtraFarmDelay = self.Menu.Farming.ExtraFarmDelay:Value() * 0.001;
 		local boundingRadius = 0;--myHero.boundingRadius;
+		--[[
+		local IsUnderTurret = false;
+		local allyTurrets = ObjectManager:GetAllyTurrets();
+		local nearestTurret = nil;
+		local nearestDistance = LocalMathHuge;
+		local maxDistanceSquared = 1500 * 1500;
+		for i = 1, #allyTurrets do
+			local turret = allyTurrets[i];
+			local distance = Utilities:GetDistanceSquared(myHero, turret);
+			if distance < maxDistanceSquared then
+				if nearestDistance > distance then
+					nearestDistance = distance;
+					nearestTurret = turret;
+				end
+			end
+		end
+
+		if nearestTurret ~= nil then
+			for i = 1, #EnemyMinionsInRange do
+				local minion = EnemyMinionsInRange[i];
+				if Utilities:IsInAutoAttackRange(nearestTurret, minion) then
+					print("hehe")
+				end
+			end
+		end
+
+		]]
+
+
 		for i = 1, #EnemyMinionsInRange do
 			local minion = EnemyMinionsInRange[i];
-			if Utilities:IsInRange(myHero, minion, 1500) then
+			if Utilities:IsInAutoAttackRange(myHero, minion) then
 				local windUpTime = self:GetWindUpTime(myHero, minion) + ExtraFarmDelay;
 				local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / self:GetMissileSpeed());
 				local orbwalkerMinion = __OrbwalkerMinion(minion);
@@ -3515,11 +3559,8 @@ class "__Orbwalker"
 			end
 		end);
 		for i = 1, #LastHitMinions do
-			local minion = LastHitMinions[i].Minion;
-			if Utilities:IsInAutoAttackRange(myHero, minion) then
-				self.LastHitMinion = minion;
-				break;
-			end
+			self.LastHitMinion = LastHitMinions[i].Minion;
+			break;
 		end
 
 		LocalTableSort(AlmostLastHitMinions, function(a, b)
@@ -3530,11 +3571,8 @@ class "__Orbwalker"
 			end
 		end);
 		for i = 1, #AlmostLastHitMinions do
-			local minion = AlmostLastHitMinions[i].Minion;
-			if Utilities:IsInAutoAttackRange(myHero, minion) then
-				self.AlmostLastHitMinion = minion;
-				break;
-			end
+			self.AlmostLastHitMinion = AlmostLastHitMinions[i].Minion;
+			break;
 		end
 
 		local PushPriority = self.Menu.Farming.PushPriority:Value();
@@ -3545,13 +3583,9 @@ class "__Orbwalker"
 				return a.LaneClearHealth > b.LaneClearHealth;
 			end
 		end);
-
 		for i = 1, #LaneClearMinions do
-			local minion = LaneClearMinions[i].Minion;
-			if Utilities:IsInAutoAttackRange(myHero, minion) then
-				self.LaneClearMinion = minion;
-				break;
-			end
+			self.LaneClearMinion = LaneClearMinions[i].Minion;
+			break;
 		end
 
 		if self.AlmostLastHitMinion ~= nil then
@@ -3591,6 +3625,14 @@ class "__Orbwalker"
 
 	function __Orbwalker:OnPostAttack(cb)
 		Linq:Add(self.OnPostAttackCallbacks, cb);
+	end
+
+	function __Orbwalker:SetMovement(boolean)
+		self.Movement = boolean;
+	end
+
+	function __Orbwalker:SetAttack(boolean)
+		self.Attack = boolean;
 	end
 
 
