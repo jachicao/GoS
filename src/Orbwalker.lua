@@ -165,7 +165,7 @@ local COLOR_ORANGE_RED				= LocalDrawColor(255, 255, 69, 0);
 local COLOR_WHITE					= LocalDrawColor(255, 255, 255, 255);
 local COLOR_BLACK					= LocalDrawColor(255, 0, 0, 0);
 local COLOR_RED						= LocalDrawColor(255, 255, 0, 0);
-local COLOR_GREEN					= LocalDrawColor(255, 0, 255, 0);
+local COLOR_YELLOW					= LocalDrawColor(255, 255, 255, 0);
 
 local DAMAGE_TYPE_PHYSICAL			= _G.SDK.DAMAGE_TYPE_PHYSICAL;
 local DAMAGE_TYPE_MAGICAL			= _G.SDK.DAMAGE_TYPE_MAGICAL;
@@ -220,286 +220,263 @@ LocalCallbackAdd('Load', function()
 	end);
 end);
 
-AddLoadCallback(function()
-	local ControlOrder = nil;
-	local CONTROL_TYPE_ATTACK			= 1;
-	local CONTROL_TYPE_MOVE				= 2;
-	local CONTROL_TYPE_CASTSPELL		= 3;
-	local ControlTypeTable = {};
 
-	local FlashKey = Utilities:GetHotKeyFromSlot(Utilities:GetSlotFromName(myHero, "SummonerFlash"));
-	local FlashPressed = false;
-	
-	local ControlAttackTable = {};
-	local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
-	local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
-	local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
-	local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
-	local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
-	
-	ControlAttackTable = {
-		[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
-			LocalControlSetCursorPos(ControlOrder.Target.pos);
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
-		end,
-		[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
-			if ControlOrder.TargetIsHero then
-				LocalControlKeyDown(_G.HK_TCO);
-			end
-			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
-				ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
-			end
-		end,
-		[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
-			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
-				ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
-				if ControlOrder.TargetIsHero then
-					LocalControlKeyUp(_G.HK_TCO);
-				end
-			end
-		end,
-		[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
-			local position = ControlOrder.MousePosition;
-			LocalControlSetCursorPos(position.x, position.y);
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
-		end,
-		[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
-			ControlOrder = nil;
-		end,
-	};
-	
-	_G.Control.Attack = function(target)
-		local isNil = ControlOrder == nil;
-		if isNil then
-			ControlOrder = {
-				Type = CONTROL_TYPE_ATTACK;
-				Target = target,
-				NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
-				MousePosition = _G.cursorPos,
-				TargetIsHero = target.type == Obj_AI_Hero
-			};
-			ControlTypeTable[ControlOrder.Type]();
-		end
-		return isNil;
-	end
+local ControlOrder = nil;
+local CONTROL_TYPE_ATTACK			= 1;
+local CONTROL_TYPE_MOVE				= 2;
+local CONTROL_TYPE_CASTSPELL		= 3;
+local ControlTypeTable = {};
 
-	local ControlMoveTable = {};
-	local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
-	local CONTROL_MOVE_STEP_PRESS_POSITION				= 2;
-	local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
-	local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
-	local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
-	
-	ControlMoveTable = {
-		[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
-			if ControlOrder.TargetPosition.z ~= nil then
-				LocalControlSetCursorPos(ControlOrder.TargetPosition);
-			else
-				LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
-			end
-			ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
-		end,
-		[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
+local ControlAttackTable = {};
+local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
+local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
+local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
+local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
+local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
+
+ControlAttackTable = {
+	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
+		LocalControlSetCursorPos(ControlOrder.Target.pos);
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
+	end,
+	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
+		if ControlOrder.TargetIsHero then
 			LocalControlKeyDown(_G.HK_TCO);
-			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
-				ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
-			end
-		end,
-		[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
-			if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
-				LocalControlKeyUp(_G.HK_TCO);
-				if ControlOrder.TargetPosition ~= nil then
-					ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
-				else
-					ControlOrder = nil;
-				end
-			end
-		end,
-		[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
-			local position = ControlOrder.MousePosition;
-			LocalControlSetCursorPos(position.x, position.y);
-			ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
-		end,
-		[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
-			ControlOrder = nil;
-		end,
-	};
-	
-	_G.Control.Move = function(a, b, c)
-		local isNil = ControlOrder == nil;
-		if isNil then
-			if a and b and c then
-				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE,
-					TargetPosition = LocalVector(a, b, c),
-					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-					MousePosition = _G.cursorPos,
-				};
-			elseif a and b then
-				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE,
-					TargetPosition = LocalVector({ x = a, y = b}),
-					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-					MousePosition = _G.cursorPos,
-				};
-			elseif a then
-				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE,
-					TargetPosition = a,
-					NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
-					MousePosition = _G.cursorPos,
-				};
-			else
-				ControlOrder = {
-					Type = CONTROL_TYPE_MOVE,
-					NextStep = CONTROL_MOVE_STEP_PRESS_POSITION,
-					MousePosition = _G.cursorPos,
-				};
-			end
-			ControlTypeTable[ControlOrder.Type]();
 		end
-		return isNil;
+		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+		end
+	end,
+	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
+		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
+			if ControlOrder.TargetIsHero then
+				LocalControlKeyUp(_G.HK_TCO);
+			end
+		end
+	end,
+	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
+	end,
+	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
+		ControlOrder = nil;
+	end,
+};
+
+_G.Control.Attack = function(target)
+	local isNil = ControlOrder == nil;
+	if isNil then
+		ControlOrder = {
+			Type = CONTROL_TYPE_ATTACK;
+			Target = target,
+			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
+			MousePosition = _G.cursorPos,
+			TargetIsHero = target.type == Obj_AI_Hero
+		};
+		ControlTypeTable[ControlOrder.Type]();
 	end
-	
-	local ControlCastSpellTable = {};
-	local CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION		= 1;
-	local CONTROL_CASTSPELL_STEP_PRESS_KEY					= 2;
-	local CONTROL_CASTSPELL_STEP_PRESS_POSITION				= 3;
-	local CONTROL_CASTSPELL_STEP_RELEASE_POSITION			= 4;
-	local CONTROL_CASTSPELL_STEP_RELEASE_KEY				= 5;
-	local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 6;
-	local CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION		= 7;
-	
-	ControlCastSpellTable = {
-		[CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION] = function()
-			local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
-			LocalControlSetCursorPos(position);
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
-		end,
-		[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
-			LocalControlKeyDown(ControlOrder.Key);
+	return isNil;
+end
+
+local ControlMoveTable = {};
+local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
+local CONTROL_MOVE_STEP_PRESS_POSITION				= 2;
+local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
+local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
+local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
+
+ControlMoveTable = {
+	[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
+		if ControlOrder.TargetPosition.z ~= nil then
+			LocalControlSetCursorPos(ControlOrder.TargetPosition);
+		else
+			LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
+		end
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
+	end,
+	[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
+		LocalControlKeyDown(_G.HK_TCO);
+		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+		end
+	end,
+	[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
+		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
+			LocalControlKeyUp(_G.HK_TCO);
 			if ControlOrder.TargetPosition ~= nil then
-				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_POSITION;
-			else
-				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
-			end
-		end,
-		[CONTROL_CASTSPELL_STEP_PRESS_POSITION] = function()
-			if LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN) then
-				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_POSITION;
-			end
-		end,
-		[CONTROL_CASTSPELL_STEP_RELEASE_POSITION] = function()
-			if LocalControlMouseEvent(MOUSEEVENTF_LEFTUP) then
-				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
-			end
-		end,
-		[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
-			LocalControlKeyUp(ControlOrder.Key);
-			if ControlOrder.TargetPosition ~= nil then
-				ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION;
+				ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
 			else
 				ControlOrder = nil;
 			end
-		end,
-		[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
-			local position = ControlOrder.MousePosition;
-			LocalControlSetCursorPos(position.x, position.y);
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION;
-		end,
-		[CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION] = function()
-			ControlOrder = nil;
-		end,
-	};
+		end
+	end,
+	[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
+	end,
+	[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
+		ControlOrder = nil;
+	end,
+};
 
-	_G.Control.CastSpell = function(key, a, b, c)
-		local isNil = ControlOrder == nil;
-		if isNil then
-			if a and b and c then
+_G.Control.Move = function(a, b, c)
+	local isNil = ControlOrder == nil;
+	if isNil then
+		if a and b and c then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE,
+				TargetPosition = LocalVector(a, b, c),
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a and b then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE,
+				TargetPosition = LocalVector({ x = a, y = b}),
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a then
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE,
+				TargetPosition = a,
+				NextStep = CONTROL_MOVE_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		else
+			ControlOrder = {
+				Type = CONTROL_TYPE_MOVE,
+				NextStep = CONTROL_MOVE_STEP_PRESS_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		end
+		ControlTypeTable[ControlOrder.Type]();
+	end
+	return isNil;
+end
+
+local ControlCastSpellTable = {};
+local CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION		= 1;
+local CONTROL_CASTSPELL_STEP_PRESS_KEY					= 2;
+local CONTROL_CASTSPELL_STEP_PRESS_POSITION				= 3;
+local CONTROL_CASTSPELL_STEP_RELEASE_POSITION			= 4;
+local CONTROL_CASTSPELL_STEP_RELEASE_KEY				= 5;
+local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 6;
+local CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION		= 7;
+
+ControlCastSpellTable = {
+	[CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION] = function()
+		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
+		LocalControlSetCursorPos(position);
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
+	end,
+	[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
+		LocalControlKeyDown(ControlOrder.Key);
+		if ControlOrder.TargetPosition ~= nil then
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_POSITION;
+		else
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+		end
+	end,
+	[CONTROL_CASTSPELL_STEP_PRESS_POSITION] = function()
+		if LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN) then
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_POSITION;
+		end
+	end,
+	[CONTROL_CASTSPELL_STEP_RELEASE_POSITION] = function()
+		if LocalControlMouseEvent(MOUSEEVENTF_LEFTUP) then
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+		end
+	end,
+	[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
+		LocalControlKeyUp(ControlOrder.Key);
+		if ControlOrder.TargetPosition ~= nil then
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION;
+		else
+			ControlOrder = nil;
+		end
+	end,
+	[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION;
+	end,
+	[CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION] = function()
+		ControlOrder = nil;
+	end,
+};
+
+_G.Control.CastSpell = function(key, a, b, c)
+	local isNil = ControlOrder == nil;
+	if isNil then
+		if a and b and c then
+			ControlOrder = {
+				Type = CONTROL_TYPE_CASTSPELL,
+				Key = key,
+				TargetPosition = LocalVector(a, b, c),
+				NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a and b then
+			ControlOrder = {
+				Type = CONTROL_TYPE_CASTSPELL,
+				Key = key,
+				TargetPosition = LocalVector({ x = a, y = b}),
+				NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+				MousePosition = _G.cursorPos,
+			};
+		elseif a then
+			if a.pos then
 				ControlOrder = {
 					Type = CONTROL_TYPE_CASTSPELL,
 					Key = key,
-					TargetPosition = LocalVector(a, b, c),
+					Target = a,
+					TargetPosition = a.pos,
 					NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
 					MousePosition = _G.cursorPos,
 				};
-			elseif a and b then
-				ControlOrder = {
-					Type = CONTROL_TYPE_CASTSPELL,
-					Key = key,
-					TargetPosition = LocalVector({ x = a, y = b}),
-					NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
-					MousePosition = _G.cursorPos,
-				};
-			elseif a then
-				if a.pos then
-					ControlOrder = {
-						Type = CONTROL_TYPE_CASTSPELL,
-						Key = key,
-						Target = a,
-						TargetPosition = a.pos,
-						NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
-						MousePosition = _G.cursorPos,
-					};
-				else
-					ControlOrder = {
-						Type = CONTROL_TYPE_CASTSPELL,
-						Key = key,
-						TargetPosition = a,
-						NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
-						MousePosition = _G.cursorPos,
-					};
-				end
 			else
 				ControlOrder = {
 					Type = CONTROL_TYPE_CASTSPELL,
 					Key = key,
-					NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY,
+					TargetPosition = a,
+					NextStep = CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION,
+					MousePosition = _G.cursorPos,
 				};
 			end
-			ControlTypeTable[ControlOrder.Type]();
+		else
+			ControlOrder = {
+				Type = CONTROL_TYPE_CASTSPELL,
+				Key = key,
+				NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY,
+			};
 		end
-		return isNil;
+		ControlTypeTable[ControlOrder.Type]();
 	end
+	return isNil;
+end
 
-	ControlTypeTable = {
-		[CONTROL_TYPE_ATTACK] = function()
-			ControlAttackTable[ControlOrder.NextStep]();
-		end,
-		[CONTROL_TYPE_MOVE] = function()
-			ControlMoveTable[ControlOrder.NextStep]();
-		end,
-		[CONTROL_TYPE_CASTSPELL] = function()
-			ControlCastSpellTable[ControlOrder.NextStep]();
-		end
-	};
-	LocalCallbackAdd('Draw', function()
-		if ControlOrder ~= nil then
-			ControlTypeTable[ControlOrder.Type]();
-		end
-	end);
-
-	--[[
-	if FlashKey ~= nil then
-		LocalCallbackAdd('WndMsg', function(msg, wParam)
-			if wParam == FlashKey then
-				if msg == KEY_UP then
-					FlashPressed = true;
-				elseif msg == KEY_DOWN then
-					if ControlOrder ~= nil then
-						print("Cancelling");
-						local MousePosition = ControlOrder.MousePosition;
-						ControlOrder = nil;
-						_G.Control.Move(MousePosition);
-					end
-					FlashPressed = false;
-				end
-			end
-		end);
+ControlTypeTable = {
+	[CONTROL_TYPE_ATTACK] = function()
+		ControlAttackTable[ControlOrder.NextStep]();
+	end,
+	[CONTROL_TYPE_MOVE] = function()
+		ControlMoveTable[ControlOrder.NextStep]();
+	end,
+	[CONTROL_TYPE_CASTSPELL] = function()
+		ControlCastSpellTable[ControlOrder.NextStep]();
 	end
-	]]
-	
+};
+
+LocalCallbackAdd('Draw', function()
+	if ControlOrder ~= nil then
+		ControlTypeTable[ControlOrder.Type]();
+	end
 end);
+
 
 class "__BuffManager"
 	function __BuffManager:__init()
@@ -1952,6 +1929,10 @@ class "__HealthPrediction"
 		return health;
 	end
 
+	function __HealthPrediction:GetAttackOrderDelay()
+		return Utilities:GetLatency() * 1.5 - 0.03;
+	end
+
 class "__IncomingAttack"
 	function __IncomingAttack:__init(source)
 		self.Source = source;
@@ -2006,7 +1987,7 @@ class "__IncomingAttack"
 	function __IncomingAttack:GetPredictedDamage(target, delay, addNextAutoAttacks)
 		local damage = 0;
 		if not self:ShouldRemove() then
-			delay = delay + Utilities:GetLatency() * 1.5 - 0.03;
+			delay = delay + HealthPrediction:GetAttackOrderDelay();
 			local CurrentTime = LocalGameTimer();
 			local timeTillHit = self:GetArrivalTime(target) - CurrentTime;
 			if timeTillHit < 0 then
@@ -2689,7 +2670,7 @@ class "__Orbwalker"
 					--TODO
 				end
 				local targets = {};
-				local t = ObjectManager:GetEnemyHeroes(1500);
+				local t = ObjectManager:GetEnemyHeroes();
 				for i = 1, #t do
 					local hero = t[i];
 					if Utilities:IsInAutoAttackRange(myHero, hero) then
@@ -2815,8 +2796,8 @@ class "__Orbwalker"
 			self.Menu.Drawings:MenuElement({ id = "EnemyRange", name = "Enemy AutoAttack Range", value = true });
 			self.Menu.Drawings:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = false });
 			self.Menu.Drawings:MenuElement({ id = "LastHittableMinions", name = "Last Hittable Minions", value = true });
-		
-		LocalCallbackAdd('Draw', function()
+
+		LocalCallbackAdd('Tick', function()
 			self:OnUpdate();
 		end);
 		LocalCallbackAdd('Draw', function()
@@ -3051,7 +3032,7 @@ class "__Orbwalker"
 				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
 			end
 			if self.UnderTurretMinion ~= nil then
-				LocalDrawCircle(self.UnderTurretMinion.pos, LocalMathMax(65, self.UnderTurretMinion.boundingRadius), COLOR_GREEN);
+				LocalDrawCircle(self.UnderTurretMinion.pos, LocalMathMax(65, self.UnderTurretMinion.boundingRadius), COLOR_YELLOW);
 			end
 		end
 		--[[
@@ -3397,9 +3378,7 @@ class "__Orbwalker"
 				if LastHitPriority and LaneClearHeroes and not self:ShouldWait() then
 					Linq:Add(potentialTargets, hero);
 				end
-				if Utilities:IdEquals(laneMinion, self.LaneClearMinion) then
-					Linq:Add(potentialTargets, laneMinion);
-				end
+				Linq:Add(potentialTargets, laneMinion);
 				Linq:Add(potentialTargets, otherMinion);
 			end
 		end
@@ -3529,7 +3508,7 @@ class "__Orbwalker"
 			local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / MissileSpeed);
 			local orbwalkerMinion = __OrbwalkerMinion(minion);
 			orbwalkerMinion.LastHitTime = windUpTime + ExtraFarmDelay + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
-			orbwalkerMinion.LaneClearTime = windUpTime + ExtraFarmDelay + animationTime + maxMissileTravelTime + 0.1;
+			orbwalkerMinion.LaneClearTime = animationTime + windUpTime + ExtraFarmDelay + maxMissileTravelTime + 0.1;
 			OrbwalkerMinionsHash[minion.handle] = orbwalkerMinion;
 			if not IsUnderTurret[minion.networkID] and HealthPrediction.AlliesSearchingTargetDamage[minion.networkID] ~= nil then
 				orbwalkerMinion.LaneClearHealth = orbwalkerMinion.LaneClearHealth - HealthPrediction.AlliesSearchingTargetDamage[minion.networkID];
@@ -3629,7 +3608,7 @@ class "__Orbwalker"
 				AutoAttackArrivals[minion.networkID] = {};
 				local myHeroMinionHealth = minion.health;
 				local myHeroDamage = self:GetAutoAttackDamage(minion);
-				local myHeroNextAutoAttackArrival = CurrentTime;
+				local myHeroNextAutoAttackArrival = CurrentTime + self:GetAttackOrderDelay();
 				while myHeroMinionHealth > 0 do
 					myHeroNextAutoAttackArrival = myHeroNextAutoAttackArrival + myHeroMissileTravelTime;
 					Linq:Add(AutoAttackArrivals[minion.networkID], { isMe = true, ArrivalTime = myHeroNextAutoAttackArrival, Damage = myHeroDamage });
@@ -3648,7 +3627,7 @@ class "__Orbwalker"
 			if turretEndTime > CurrentTime then
 				turretStartTime = turretEndTime - turretAnimationTime;
 			else
-				turretStartTime = CurrentTime;
+				turretStartTime = turretEndTime + 0.1;
 			end
 			local turretDamage = 0;
 			local turretNextAutoAttackArrival = turretStartTime;
@@ -3684,10 +3663,10 @@ class "__Orbwalker"
 					local TurretWillAttack = false;
 					for j = 1, #AutoAttacks do
 						local AutoAttack = AutoAttacks[j];
-						minionHealth = minionHealth - AutoAttack.Damage;
 						if not AutoAttack.isMe then
 							TurretWillAttack = true;
 						end
+						minionHealth = minionHealth - AutoAttack.Damage;
 						if minionHealth <= 0 then
 							if AutoAttack.isMe then
 								if TurretWillAttack then
