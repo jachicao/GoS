@@ -3810,9 +3810,6 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsLaneClearable()
-		if Orbwalker.OnlyLastHit then
-			return false;
-		end
 		if LocalMathAbs(self.LaneClearHealth - self.Minion.health) < EPSILON then
 			return true;
 		end
