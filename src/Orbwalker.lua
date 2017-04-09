@@ -3711,6 +3711,13 @@ class "__Orbwalker"
 		end
 
 		local PushPriority = self.Menu.Farming.PushPriority:Value();
+		LocalTableSort(LaneClearMinionsUnderTurret, function(a, b)
+			if PushPriority then
+				return a.LaneClearHealth < b.LaneClearHealth;
+			else
+				return a.LaneClearHealth > b.LaneClearHealth;
+			end
+		end);
 		LocalTableSort(LaneClearMinions, function(a, b)
 			if PushPriority then
 				return a.LaneClearHealth < b.LaneClearHealth;
