@@ -2816,14 +2816,11 @@ class "__Orbwalker"
 			self.Menu.Drawings:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = false });
 			self.Menu.Drawings:MenuElement({ id = "LastHittableMinions", name = "Last Hittable Minions", value = true });
 		
-		LocalCallbackAdd('Tick', function()
-			self:OnTick();
+		LocalCallbackAdd('Draw', function()
+			self:OnUpdate();
 		end);
 		LocalCallbackAdd('Draw', function()
 			self:OnDraw();
-		end);
-		LocalCallbackAdd('Draw', function()
-			self:OnUpdate();
 		end);
 
 		self.Loaded = true;
@@ -2839,7 +2836,6 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnUpdate()
-
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
 			self.SpellWindUpTime = Utilities:GetSpellWindUpTime(myHero);
@@ -2911,9 +2907,6 @@ class "__Orbwalker"
 			LocalControlKeyUp(72);
 			self.LastHoldPosition = 0;
 		end
-	end
-
-	function __Orbwalker:OnTick()
 	end
 
 	function __Orbwalker:__OnAutoAttackReset()
@@ -3196,10 +3189,7 @@ class "__Orbwalker"
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
 		local endTime = self:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
-		if LocalGameTimer() - endTime + self:GetMovementOrderDelay() >= 0 then
-			return false;
-		end
-		return true;
+		return LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0;
 	end
 
 	function __Orbwalker:GetMaximumIssueOrderDelay()
@@ -3687,12 +3677,13 @@ class "__Orbwalker"
 				local minion = UnderTurretMinions[i];
 				local minionHealth = minion.health;
 				if LaneClearMinionsUnderTurretHash[minion.networkID] then
-					LocalTableSort(AutoAttackArrivals[minion.networkID], function(a, b)
+					local AutoAttacks = AutoAttackArrivals[minion.networkID];
+					LocalTableSort(AutoAttacks, function(a, b)
 						return a.ArrivalTime < b.ArrivalTime;
 					end);
 					local TurretWillAttack = false;
-					for j = 1, #AutoAttackArrivals[minion.networkID] do
-						local AutoAttack = AutoAttackArrivals[minion.networkID][j];
+					for j = 1, #AutoAttacks do
+						local AutoAttack = AutoAttacks[j];
 						minionHealth = minionHealth - AutoAttack.Damage;
 						if not AutoAttack.isMe then
 							TurretWillAttack = true;
@@ -3700,7 +3691,7 @@ class "__Orbwalker"
 						if minionHealth <= 0 then
 							if AutoAttack.isMe then
 								if TurretWillAttack then
-									if AutoAttackArrivals[minion.networkID][1].isMe then
+									if AutoAttacks[1].isMe then
 										if self.UnderTurretMinion == nil then
 											self.UnderTurretMinion = minion;
 										end
@@ -3708,7 +3699,7 @@ class "__Orbwalker"
 								else
 									local orbwalkerMinion = OrbwalkerMinionsHash[minion.handle];
 									if orbwalkerMinion:IsLaneClearable() then
-										Linq:Add(LaneClearMinionsUnderTurret, OrbwalkerMinionsHash[minion.handle]);
+										Linq:Add(LaneClearMinionsUnderTurret, orbwalkerMinion);
 									end
 								end
 							end
