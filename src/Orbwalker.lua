@@ -32,7 +32,7 @@
         :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
         :GetTarget(range: number, damageType: enum) -- local target = _G.SDK.TargetSelector:GetTarget(1000, _G.SDK.DAMAGE_TYPE_PHYSICAL);
 
-    _G.SDK.ObjectManager
+    _G.SDK.ObjectManager -- returns valid units
         :GetMinions(range: number or math.huge)
         :GetAllyMinions(range: number or math.huge)
         :GetEnemyMinions(range: number or math.huge)
@@ -2275,98 +2275,95 @@ class "__TargetSelector"
 		};
 		self.Selector = {
 			[TARGET_SELECTOR_MODE_AUTO] = function(targets, damageType)
+				local CachedPriority = {};
+				for i = 1, #targets do
+					local target = targets[i];
+					CachedPriority[target.networkID] = self:GetReductedPriority(target) * Damage:CalculateDamage(myHero, target, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / target.health;
+				end
 				LocalTableSort(targets, function(a, b)
-					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / a.health;
-					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / b.health;
-					return first > second;
+					return CachedPriority[a.networkID] > CachedPriority[b.networkID];
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_STACK] = function(targets, damageType)
-				LocalTableSort(targets, function(a, b)
-					local firstStack = 1;
-					local secondStack = 1;
+				local CachedPriority = {};
+				for i = 1, #targets do
+					local stack = 1;
+					local target = targets[i];
 					local t = self.BuffStackNames["All"];
 					for i = 1, #t do
 						local buffName = t[i];
-						firstStack = firstStack + LocalMathMax(0, BuffManager:GetBuffCount(a, buffName));
-						secondStack = secondStack + LocalMathMax(0, BuffManager:GetBuffCount(b, buffName));
+						stack = stack + LocalMathMax(0, BuffManager:GetBuffCount(target, buffName));
 					end
 					if self.BuffStackNames[myHero.charName] ~= nil then
 						local t = self.BuffStackNames[myHero.charName];
 						for i = 1, #t do
 							local buffName = t[i];
-							firstStack = firstStack + LocalMathMax(0, BuffManager:GetBuffCount(a, buffName)); 
-							secondStack = secondStack + LocalMathMax(0, BuffManager:GetBuffCount(b, buffName));
+							stack = stack + LocalMathMax(0, BuffManager:GetBuffCount(target, buffName)); 
 						end
 					end
-					local first = firstStack * self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / a.health;
-					local second = secondStack * self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / b.health;
-					return first > second;
+					CachedPriority[target.networkID] = self:GetReductedPriority(target) * Damage:CalculateDamage(myHero, target, (damageType == DAMAGE_TYPE_MAGICAL) and DAMAGE_TYPE_MAGICAL or DAMAGE_TYPE_PHYSICAL, 100) / target.health;
+				end
+				LocalTableSort(targets, function(a, b)
+					return CachedPriority[a.networkID] > CachedPriority[b.networkID];
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_ATTACK_DAMAGE] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = a.totalDamage;
-					local second = b.totalDamage;
-					return first > second;
+					return a.totalDamage > b.totalDamage;
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_MOST_MAGIC_DAMAGE] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = a.ap;
-					local second = b.ap;
-					return first > second;
+					return a.ap > b.ap;
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LEAST_HEALTH] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = a.health;
-					local second = b.health;
-					return first < second;
+					return a.health < b.health;
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_CLOSEST] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = Utilities:GetDistanceSquared(myHero, a);
-					local second = Utilities:GetDistanceSquared(myHero, b);
-					return first < second;
+					return Utilities:GetDistanceSquared(myHero, a) < Utilities:GetDistanceSquared(myHero, b);
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_HIGHEST_PRIORITY] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = self:GetPriority(a);
-					local second = self:GetPriority(b);
-					return first > second;
+					return self:GetPriority(a) > self:GetPriority(b);
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LESS_ATTACK] = function(targets, damageType)
+				local CachedPriority = {};
+				for i = 1, #targets do
+					local target = targets[i];
+					CachedPriority[target.networkID] = self:GetReductedPriority(target) * Damage:CalculateDamage(myHero, target, DAMAGE_TYPE_PHYSICAL, 100) / target.health;
+				end
 				LocalTableSort(targets, function(a, b)
-					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, DAMAGE_TYPE_PHYSICAL, 100) / a.health;
-					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, DAMAGE_TYPE_PHYSICAL, 100) / b.health;
-					return first > second;
+					return CachedPriority[a.networkID] > CachedPriority[b.networkID];
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_LESS_CAST] = function(targets, damageType)
+				local CachedPriority = {};
+				for i = 1, #targets do
+					local target = targets[i];
+					CachedPriority[target.networkID] = self:GetReductedPriority(target) * Damage:CalculateDamage(myHero, target, DAMAGE_TYPE_MAGICAL, 100) / target.health;
+				end
 				LocalTableSort(targets, function(a, b)
-					local first = self:GetReductedPriority(a) * Damage:CalculateDamage(myHero, a, DAMAGE_TYPE_MAGICAL, 100) / a.health;
-					local second = self:GetReductedPriority(b) * Damage:CalculateDamage(myHero, b, DAMAGE_TYPE_MAGICAL, 100) / b.health;
-					return first > second;
+					return CachedPriority[a.networkID] > CachedPriority[b.networkID];
 				end);
 				return targets[1];
 			end,
 			[TARGET_SELECTOR_MODE_NEAR_MOUSE] = function(targets, damageType)
 				LocalTableSort(targets, function(a, b)
-					local first = Utilities:GetDistanceSquared(a, _G.mousePos);
-					local second = Utilities:GetDistanceSquared(b, _G.mousePos);
-					return first < second;
+					return Utilities:GetDistanceSquared(a, _G.mousePos) < Utilities:GetDistanceSquared(b, _G.mousePos);
 				end);
 				return targets[1];
 			end,
@@ -2428,7 +2425,7 @@ class "__TargetSelector"
 
 	function __TargetSelector:OnDraw()
 		if self.Menu.Drawings.SelectedTarget:Value() then
-			if Utilities:IsValidTarget(self.SelectedTarget) then
+			if self.Menu.Advanced.SelectedTarget:Value() and Utilities:IsValidTarget(self.SelectedTarget) then
 				LocalDrawCircle(self.SelectedTarget.pos, 120, 4, COLOR_RED);
 			end
 		end
@@ -2496,7 +2493,7 @@ class "__TargetSelector"
 			if #targets == 1 then
 				return targets[1];
 			end
-			if Utilities:IsValidTarget(self.SelectedTarget) then
+			if self.Menu.Advanced.SelectedTarget:Value() and Utilities:IsValidTarget(self.SelectedTarget) then
 				for i = 1, #targets do
 					if Utilities:IdEquals(targets[i], self.SelectedTarget) then
 						return self.SelectedTarget;
@@ -2605,10 +2602,6 @@ class "__Orbwalker"
 
 		self.LastMinionHealth = {};
 		self.LastMinionDraw = {};
-
-		self.ExtraWindUpTimes = {
-
-		};
 
 		self.AttackDataWindUpTime = 0;
 		self.SpellWindUpTime = 0;
@@ -3221,9 +3214,6 @@ class "__Orbwalker"
 
 	function __Orbwalker:IsAutoAttacking(unit)
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
-		if self.ExtraWindUpTimes[unit.charName] ~= nil then
-			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
-		end
 		local endTime = self:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
 		return LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0;
 	end
@@ -3422,6 +3412,7 @@ class "__Orbwalker"
 				Linq:Add(potentialTargets, otherMinion);
 			end
 		end
+
 		for i = 1, #potentialTargets do
 			local target = potentialTargets[i];
 			if target ~= nil then
@@ -3497,10 +3488,13 @@ class "__Orbwalker"
 		local IsUnderTurret = {};
 		local UnderTurretMinions = {};
 		if nearestTurret ~= nil then
+			local CachedDistanceSquared = {};
 			for i = 1, #EnemyMinionsInAutoAttackRange do
 				local minion = EnemyMinionsInAutoAttackRange[i];
 				local range = Utilities:GetAutoAttackRange(nearestTurret, minion);
-				if Utilities:GetDistanceSquared(nearestTurret, minion.posTo) <= range * range then
+				local distanceSquared = Utilities:GetDistanceSquared(nearestTurret, minion.posTo);
+				CachedDistanceSquared[minion.networkID] = distanceSquared;
+				if distanceSquared <= range * range then
 					IsUnderTurret[minion.networkID] = true;
 					Linq:Add(UnderTurretMinions, minion);
 				else
@@ -3515,7 +3509,7 @@ class "__Orbwalker"
 					return false;
 				end
 				if a.maxHealth == b.maxHealth then
-					return Utilities:GetDistanceSquared(a.posTo, nearestTurret) < Utilities:GetDistanceSquared(b.posTo, nearestTurret);
+					return CachedDistanceSquared[a.networkID] < CachedDistanceSquared[b.networkID];
 				else
 					return a.maxHealth > b.maxHealth;
 				end
