@@ -3195,10 +3195,10 @@ class "__Orbwalker"
 			if self.AllowMovement[unit.charName] == nil or (not self.AllowMovement[unit.charName](unit)) then
 				return false;
 			end
-		elseif Utilities:IsCastingSpell(unit) then
-			if not Utilities:IsAutoAttacking(unit) then
-				return false;
-			end
+		--elseif Utilities:IsCastingSpell(unit) then
+		--	if not Utilities:IsAutoAttacking(unit) then
+		--		return false;
+		--	end
 		end
 		return not IsAutoAttacking;
 	end
@@ -3207,10 +3207,10 @@ class "__Orbwalker"
 		unit = self:GetUnit(unit);
 		if Utilities:IsChanneling(unit) then
 			return false;
-		elseif Utilities:IsCastingSpell(unit) then
-			if not Utilities:IsAutoAttacking(unit) then
-				return false;
-			end
+		--elseif Utilities:IsCastingSpell(unit) then
+		--	if not Utilities:IsAutoAttacking(unit) then
+		--		return false;
+		--	end
 		end
 		if self.DisableAutoAttack[unit.charName] ~= nil and self.DisableAutoAttack[unit.charName](unit) then
 			return false;
