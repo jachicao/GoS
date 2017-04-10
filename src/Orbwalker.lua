@@ -765,11 +765,11 @@ class "__Damage"
 		self.TurretToMinionPercentMod = {};
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
-			self.TurretToMinionPercentMod[charName] = 0.45;
+			self.TurretToMinionPercentMod[charName] = 0.43;
 		end
 		for i = 1, #ObjectManager.MinionTypesDictionary["Ranged"] do
 			local charName = ObjectManager.MinionTypesDictionary["Ranged"][i];
-			self.TurretToMinionPercentMod[charName] = 0.7;
+			self.TurretToMinionPercentMod[charName] = 0.68;
 		end
 		for i = 1, #ObjectManager.MinionTypesDictionary["Siege"] do
 			local charName = ObjectManager.MinionTypesDictionary["Siege"][i];
@@ -3059,6 +3059,40 @@ class "__Orbwalker"
 			end
 		end
 		--[[
+		local allyTurrets = ObjectManager:GetAllyTurrets();
+		local nearestTurret = nil;
+		local nearestDistance = LocalMathHuge;
+		local maxDistance = 775;
+		local maxDistanceSquared = maxDistance * maxDistance;
+		for i = 1, #allyTurrets do
+			local turret = allyTurrets[i];
+			local distance = Utilities:GetDistanceSquared(myHero, turret);
+			if distance < maxDistanceSquared then
+				if nearestDistance > distance then
+					nearestDistance = distance;
+					nearestTurret = turret;
+				end
+			end
+		end
+
+		local tempLastMinionHealth = {};
+		if nearestTurret ~= nil then
+			local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
+			for i = 1, #EnemyMinionsInRange do
+				local minion = EnemyMinionsInRange[i];
+				if Utilities:IsInRange(myHero, minion, 1500) then
+					local health = minion.health;
+					if self.LastMinionHealth[minion.networkID] ~= nil and self.LastMinionHealth[minion.networkID] > health then
+						local lost = (self.LastMinionHealth[minion.networkID] - health);
+						print("Lost: " .. lost .. ", Damage: " .. Damage:GetAutoAttackDamage(nearestTurret, minion) .. ", Time: " .. LocalGameTimer());
+					end
+					tempLastMinionHealth[minion.networkID] = health;
+				end
+			end
+		end
+		self.LastMinionHealth = tempLastMinionHealth;
+
+		
 		local enemies = {};
 		local t = ObjectManager:GetEnemyHeroes(1500);
 		for i = 1, #t do
