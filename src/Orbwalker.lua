@@ -30,19 +30,23 @@
 
     _G.SDK.TargetSelector
         :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
-        :GetTarget(range: number, damageType: enum, from: Vector or myHero.pos) -- local target = _G.SDK.TargetSelector:GetTarget(1000, _G.SDK.DAMAGE_TYPE_PHYSICAL);
+        :GetTarget(range: number, damageType: enum) -- local target = _G.SDK.TargetSelector:GetTarget(1000, _G.SDK.DAMAGE_TYPE_PHYSICAL);
 
     _G.SDK.ObjectManager
         :GetMinions(range: number or math.huge)
         :GetAllyMinions(range: number or math.huge)
         :GetEnemyMinions(range: number or math.huge)
+        :GetEnemyMinionsInAutoAttackRange()
         :GetOtherMinions(range: number or math.huge)
         :GetOtherAllyMinions(range: number or math.huge)
         :GetOtherEnemyMinions(range: number or math.huge)
+        :GetOtherEnemyMinionsInAutoAttackRange()
         :GetMonsters(range: number or math.huge)
+        :GetMonstersInAutoAttackRange()
         :GetHeroes(range: number or math.huge)
         :GetAllyHeroes(range: number or math.huge)
         :GetEnemyHeroes(range: number or math.huge)
+        :GetEnemyHeroesInAutoAttackRange()
         :GetTurrets(range: number or math.huge)
         :GetAllyTurrets(range: number or math.huge)
         :GetEnemyTurrets(range: number or math.huge)
@@ -1657,6 +1661,19 @@ class "__ObjectManager"
 		return result;
 	end
 
+	function __ObjectManager:GetEnemyMinionsInAutoAttackRange()
+		local result = {};
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) and minion.isEnemy and self:GetMinionType(minion) == MINION_TYPE_LANE_MINION then
+				if Utilities:IsInAutoAttackRange(myHero, minion) then
+					Linq:Add(result, minion);
+				end
+			end
+		end
+		return result;
+	end
+
 	function __ObjectManager:GetOtherMinions(range)
 		local result = {};
 		for i = 1, LocalGameWardCount() do
@@ -1696,12 +1713,38 @@ class "__ObjectManager"
 		return result;
 	end
 
+	function __ObjectManager:GetOtherEnemyMinionsInAutoAttackRange()
+		local result = {};
+		for i = 1, LocalGameWardCount() do
+			local minion = LocalGameWard(i);
+			if Utilities:IsValidTarget(minion) and minion.isEnemy and self:GetMinionType(minion) == MINION_TYPE_OTHER_MINION then
+				if Utilities:IsInAutoAttackRange(myHero, minion) then
+					Linq:Add(result, minion);
+				end
+			end
+		end
+		return result;
+	end
+
 	function __ObjectManager:GetMonsters(range)
 		local result = {};
 		for i = 1, LocalGameMinionCount() do
 			local minion = LocalGameMinion(i);
 			if Utilities:IsValidTarget(minion) and self:GetMinionType(minion) == MINION_TYPE_MONSTER then
 				if Utilities:IsInRange(myHero, minion, range) then
+					Linq:Add(result, minion);
+				end
+			end
+		end
+		return result;
+	end
+
+	function __ObjectManager:GetMonstersInAutoAttackRange()
+		local result = {};
+		for i = 1, LocalGameMinionCount() do
+			local minion = LocalGameMinion(i);
+			if Utilities:IsValidTarget(minion) and self:GetMinionType(minion) == MINION_TYPE_MONSTER then
+				if Utilities:IsInAutoAttackRange(myHero, minion) then
 					Linq:Add(result, minion);
 				end
 			end
@@ -1741,6 +1784,19 @@ class "__ObjectManager"
 			local hero = LocalGameHero(i);
 			if Utilities:IsValidTarget(hero) and hero.isEnemy then
 				if Utilities:IsInRange(myHero, hero, range) then
+					Linq:Add(result, hero);
+				end
+			end
+		end
+		return result;
+	end
+
+	function __ObjectManager:GetEnemyHeroesInAutoAttackRange()
+		local result = {};
+		for i = 1, LocalGameHeroCount() do
+			local hero = LocalGameHero(i);
+			if Utilities:IsValidTarget(hero) and hero.isEnemy then
+				if Utilities:IsInAutoAttackRange(myHero, hero) then
 					Linq:Add(result, hero);
 				end
 			end
@@ -2372,7 +2428,7 @@ class "__TargetSelector"
 
 	function __TargetSelector:OnDraw()
 		if self.Menu.Drawings.SelectedTarget:Value() then
-			if self.SelectedTarget ~= nil and Utilities:IsValidTarget(self.SelectedTarget) then
+			if Utilities:IsValidTarget(self.SelectedTarget) then
 				LocalDrawCircle(self.SelectedTarget.pos, 120, 4, COLOR_RED);
 			end
 		end
@@ -2418,7 +2474,7 @@ class "__TargetSelector"
 		end
 	end
 
-	function __TargetSelector:GetTarget(a, damageType, from, addBoundingRadius)
+	function __TargetSelector:GetTarget(a, damageType)
 		if not self.Loaded then
 			return nil;
 		end
@@ -2453,16 +2509,7 @@ class "__TargetSelector"
 			end
 		else
 			local range = a;
-			local from = from ~= nil and from or myHero;
-			local t = {};
-			local enemies = ObjectManager:GetEnemyHeroes();
-			for i = 1, #enemies do
-				local enemy = enemies[i];
-				if Utilities:IsInRange(from, enemy, range) then
-					Linq:Add(t, enemy);
-				end
-			end
-			return self:GetTarget(t, damageType);
+			return self:GetTarget(ObjectManager:GetEnemyHeroes(range), damageType);
 		end
 		return nil;
 	end
@@ -2666,31 +2713,14 @@ class "__Orbwalker"
 
 		self.TargetByType = {
 			[ORBWALKER_TARGET_TYPE_HERO] = function()
-				if myHero.charName == "Azir" then
-					--TODO
-				end
-				local targets = {};
-				local t = ObjectManager:GetEnemyHeroes();
-				for i = 1, #t do
-					local hero = t[i];
-					if Utilities:IsInAutoAttackRange(myHero, hero) then
-						Linq:Add(targets, hero);
-					end
-				end
-				return TargetSelector:GetTarget(targets, DAMAGE_TYPE_PHYSICAL);
+				return TargetSelector:GetTarget(ObjectManager:GetEnemyHeroesInAutoAttackRange(), DAMAGE_TYPE_PHYSICAL);
 			end,
 			[ORBWALKER_TARGET_TYPE_MONSTER] = function()
-				local t = ObjectManager:GetMonsters(1500);
+				local t = ObjectManager:GetMonstersInAutoAttackRange();
 				LocalTableSort(t, function(a, b)
 					return a.maxHealth > b.maxHealth;
 				end);
-				for i = 1, #t do
-					local minion = t[i];
-					if Utilities:IsInAutoAttackRange(myHero, minion) then
-						return minion;
-					end
-				end
-				return nil;
+				return t[1];
 			end,
 			[ORBWALKER_TARGET_TYPE_LANE_MINION] = function()
 				local SupportMode = false;
@@ -2724,17 +2754,11 @@ class "__Orbwalker"
 				end
 			end,
 			[ORBWALKER_TARGET_TYPE_OTHER_MINION] = function()
-				local t = ObjectManager:GetOtherEnemyMinions(1500);
+				local t = ObjectManager:GetOtherEnemyMinionsInAutoAttackRange();
 				LocalTableSort(t, function(a, b)
 					return a.health < b.health;
 				end);
-				for i = 1, #t do
-					local minion = t[i];
-					if Utilities:IsInAutoAttackRange(myHero, minion) then
-						return minion;
-					end
-				end
-				return nil;
+				return t[1];
 			end,
 			[ORBWALKER_TARGET_TYPE_STRUCTURE] = function()
 				for i = 1, #self.EnemyStructures do
@@ -2853,8 +2877,7 @@ class "__Orbwalker"
 		end
 		self.MyHeroEndTime = endTime;
 
-
-		local IsAutoAttacking = self:IsAutoAttacking();
+		local IsAutoAttacking = self:IsAutoAttacking(myHero);
 		if not IsAutoAttacking then
 			if self.MyHeroIsAutoAttacking then
 				self:__OnPostAttack();
@@ -3153,7 +3176,6 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetAttackDataEndTime(unit)
-		unit = self:GetUnit(unit);
 		local endTime = Utilities:GetAttackDataEndTime(unit);
 		if unit.isMe then
 			if self.CustomEndTime > endTime then
@@ -3164,8 +3186,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:IsAutoAttacking(unit)
-		unit = self:GetUnit(unit);
-		local ExtraWindUpTime = self.Loaded and self.Menu.General.ExtraWindUpTime:Value() * 0.001 or 0;
+		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		if self.ExtraWindUpTimes[unit.charName] ~= nil then
 			ExtraWindUpTime = ExtraWindUpTime + self.ExtraWindUpTimes[unit.charName];
 		end
@@ -3234,12 +3255,10 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CanAttackTime(unit)
-		unit = self:GetUnit(unit);
 		return LocalGameTimer() - self:GetAttackDataEndTime(unit) + self:GetAttackOrderDelay();
 	end
 
 	function __Orbwalker:CanIssueOrder(unit)
-		unit = self:GetUnit(unit);
 		if unit.isMe then
 			if self.AutoAttackResetted then
 				return true;
@@ -3249,29 +3268,21 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:GetWindUpTime(unit, target)
-		unit = self:GetUnit(unit);
 		local windUpTime = Utilities:GetAttackDataWindUpTime(unit);
 		if unit.isMe then
 			if LocalMathAbs(self.AttackDataWindUpTime - windUpTime) < EPSILON then
 				return self.SpellWindUpTime;
 			end
 		end
-		if unit.charName == "Azir" then
-			--TODO
-		end
 		return windUpTime;
 	end
 
 	function __Orbwalker:GetAnimationTime(unit, target)
-		unit = self:GetUnit(unit);
 		local animationTime = Utilities:GetAttackDataAnimationTime(unit);
 		if unit.isMe then
 			if LocalMathAbs(self.AttackDataAnimationTime - animationTime) < EPSILON then
 				return self.SpellAnimationTime;
 			end
-		end
-		if unit.charName == "Azir" then
-			--TODO
 		end
 		return animationTime;
 	end
@@ -3285,11 +3296,11 @@ class "__Orbwalker"
 		end
 		local potentialTargets = {};
 
+		local LaneClearHeroes = self.Menu.General.LaneClearHeroes:Value();
+
 		local hero = nil;
-		local heroChecked = false;
-		if self.Modes[ORBWALKER_MODE_COMBO] or self.Modes[ORBWALKER_MODE_HARASS] then
+		if self.Modes[ORBWALKER_MODE_COMBO] or self.Modes[ORBWALKER_MODE_HARASS] or (self.Modes[ORBWALKER_MODE_LANECLEAR] and LaneClearHeroes) then
 			hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
-			heroChecked = true;
 		end
 
 		local laneMinion = nil;
@@ -3350,7 +3361,6 @@ class "__Orbwalker"
 			Linq:Add(potentialTargets, otherMinion);
 		end
 		if self.Modes[ORBWALKER_MODE_LANECLEAR] then
-			local LaneClearHeroes = self.Menu.General.LaneClearHeroes:Value();
 			if structure ~= nil then
 				if not LastHitPriority then
 					Linq:Add(potentialTargets, structure);
@@ -3365,10 +3375,6 @@ class "__Orbwalker"
 					Linq:Add(potentialTargets, structure);
 				end
 			else
-				if not heroChecked then
-					hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
-					heroChecked = true;
-				end
 				if not LastHitPriority and LaneClearHeroes then
 					Linq:Add(potentialTargets, hero);
 				end
@@ -3436,14 +3442,7 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CalculateLastHittableMinions()
-		local EnemyMinions = ObjectManager:GetEnemyMinions();
-		local EnemyMinionsInAutoAttackRange = {};
-		for i = 1, #EnemyMinions do
-			local minion = EnemyMinions[i];
-			if Utilities:IsInAutoAttackRange(myHero, minion) then
-				Linq:Add(EnemyMinionsInAutoAttackRange, minion);
-			end
-		end
+		local EnemyMinionsInAutoAttackRange = ObjectManager:GetEnemyMinionsInAutoAttackRange();
 
 		local allyTurrets = ObjectManager:GetAllyTurrets();
 		local nearestTurret = nil;
