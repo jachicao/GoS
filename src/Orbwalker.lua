@@ -598,8 +598,10 @@ class "__Damage"
 				args.RawMagical = args.RawTotal;
 			end,
 			["Diana"] = function(args)
-				local level = Utilities:GetLevel(args.From);
-				args.RawMagical = args.RawMagical + LocalMathMax(15 + 5 * level, -10 + 10 * level, -60 + 15 * level, -125 + 20 * level, -200 + 25 * level) + 0.8 * args.From.ap;
+				if BuffManager:GetBuffCount(args.From, "dianapassivemarker") == 2 then
+					local level = Utilities:GetLevel(args.From);
+					args.RawMagical = args.RawMagical + LocalMathMax(15 + 5 * level, -10 + 10 * level, -60 + 15 * level, -125 + 20 * level, -200 + 25 * level) + 0.8 * args.From.ap;
+				end
 			end,
 			["Draven"] = function(args)
 				if BuffManager:HasBuff(args.From, "DravenSpinningAttack") then
@@ -1482,19 +1484,19 @@ class "__Utilities"
 		return false;
 	end
 
-	function __Utilities:GetSpellTarget(unit)
+	function __Utilities:GetActiveSpellTarget(unit)
 		return unit.activeSpell.target;
 	end
 
 
-	function __Utilities:GetSpellWindUpTime(unit)
+	function __Utilities:GetActiveSpellWindUpTime(unit)
 		if self.DisableSpellWindUpTime[unit.charName] then
 			return self:GetAttackDataWindUpTime(unit);
 		end
 		return unit.activeSpell.windup;
 	end
 
-	function __Utilities:GetSpellAnimationTime(unit)
+	function __Utilities:GetActiveSpellAnimationTime(unit)
 		if self.DisableSpellAnimationTime[unit.charName] then
 			return self:GetAttackDataAnimationTime(unit);
 		end
@@ -1849,6 +1851,9 @@ class "__HealthPrediction"
 		self.AlliesEndTime = {} -- networkID => number
 		self.AlliesSearchingTargetDamage = {}; -- networkID => number
 		LocalCallbackAdd('Tick', function()
+			if not Orbwalker:IsEnabled() then
+				return;
+			end
 			self:OnTick();
 		end);
 	end
@@ -2260,6 +2265,7 @@ class "__TargetSelector"
 		self.BuffStackNames = {
 			["All"]			= { "BraumMark" },
 			["Darius"]		= { "DariusHemo" },
+			["Diana"]		= { "dianapassivemarker" },
 			["Ekko"]		= { "EkkoStacks" },
 			["Gnar"]		= { "GnarWProc" },
 			["Kalista"]		= { "kalistaexpungemarker" },
@@ -2778,6 +2784,9 @@ class "__Orbwalker"
 				end
 			end
 		end
+
+
+		self.Menu:MenuElement({ id = "Enabled", name = "Enabled", value = true });
 			
 		self.Menu:MenuElement({ id = "Keys", name = "Keys Settings", type = MENU });
 			self.Menu.Keys:MenuElement({ id = "Combo", name = "Combo", key = string.byte(" ") });
@@ -2815,13 +2824,26 @@ class "__Orbwalker"
 			self.Menu.Drawings:MenuElement({ id = "LastHittableMinions", name = "Last Hittable Minions", value = true });
 
 		LocalCallbackAdd('Tick', function()
+			if not self:IsEnabled() then
+				return;
+			end
 			self:OnUpdate();
 		end);
 		LocalCallbackAdd('Draw', function()
+			if not self:IsEnabled() then
+				return;
+			end
 			self:OnDraw();
 		end);
 
 		self.Loaded = true;
+	end
+
+	function __Orbwalker:IsEnabled()
+		if self.Loaded then
+			return self.Menu.Enabled:Value();
+		end
+		return false;
 	end
 
 	function __Orbwalker:Clear()
@@ -2836,9 +2858,9 @@ class "__Orbwalker"
 	function __Orbwalker:OnUpdate()
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
-			self.SpellWindUpTime = Utilities:GetSpellWindUpTime(myHero);
+			self.SpellWindUpTime = Utilities:GetActiveSpellWindUpTime(myHero);
 			self.AttackDataAnimationTime = Utilities:GetAttackDataAnimationTime(myHero);
-			self.SpellAnimationTime = Utilities:GetSpellAnimationTime(myHero);
+			self.SpellAnimationTime = Utilities:GetActiveSpellAnimationTime(myHero);
 		end
 
 		local SpecialAutoAttacks = self.SpecialAutoAttacks[myHero.charName];
