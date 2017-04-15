@@ -1463,7 +1463,7 @@ class "__Utilities"
 
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
-			if self:GetSpellTarget(unit) > 0 then
+			if self:GetActiveSpellTarget(unit) > 0 then
 				if not unit.isChanneling then
 					return true;
 				else
@@ -2277,7 +2277,7 @@ class "__TargetSelector"
 			["Varus"]		= { "VarusWDebuff" },
 			["Vayne"]		= { "VayneSilverDebuff" },
 			["Velkoz"]		= { "VelkozResearchStack" },
-			["Vi"]			= { "ViWProc" },	
+			["Vi"]			= { "ViWProc" },
 		};
 		self.Selector = {
 			[TARGET_SELECTOR_MODE_AUTO] = function(targets, damageType)
