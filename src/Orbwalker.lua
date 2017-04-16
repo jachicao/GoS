@@ -1206,6 +1206,7 @@ class "__Utilities"
 			["Thresh"] = true,
 		};
 		self.DisableSpellAnimationTime = {
+			["Kalista"] = true,
 			["TwistedFate"] = true,
 		};
 		self.Slots = {
