@@ -1458,19 +1458,13 @@ class "__Utilities"
 	end
 
 	function __Utilities:IsAutoAttack(name)
-		return name:lower():find("basicattack");
+		return name:lower():find("basicattack") or self.SpecialAutoAttacks[name] ~= nil;
 	end
 
 	function __Utilities:IsAutoAttacking(unit)
 		if self:IsWindingUp(unit) then
 			if self:GetActiveSpellTarget(unit) > 0 then
-				if not unit.isChanneling then
-					return true;
-				else
-					if self.SpecialAutoAttacks[self:GetActiveSpellName(unit)] ~= nil then
-						return true;
-					end
-				end
+				return self:IsAutoAttack(self:GetActiveSpellName(unit));
 			end
 		end
 		return false;
