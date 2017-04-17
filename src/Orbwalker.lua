@@ -230,48 +230,45 @@ local CONTROL_TYPE_ATTACK			= 1;
 local CONTROL_TYPE_MOVE				= 2;
 local CONTROL_TYPE_CASTSPELL		= 3;
 local ControlTypeTable = {};
+local NextControlOrder = 0;
 
 local ControlAttackTable = {};
 local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
-local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
-local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
+local CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET	= 2;
 local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
-local CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION		= 5;
+local CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION		= 5;
 
 ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
 		LocalControlSetCursorPos(ControlOrder.Target.pos);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET;
 	end,
-	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
+	[CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET] = function()
 		if ControlOrder.TargetIsHero then
 			LocalControlKeyDown(_G.HK_TCO);
 		end
-		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+		LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
+		if ControlOrder.TargetIsHero then
+			LocalControlKeyUp(_G.HK_TCO);
 		end
-	end,
-	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
-		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
-			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
-			if ControlOrder.TargetIsHero then
-				LocalControlKeyUp(_G.HK_TCO);
-			end
-		end
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
 	end,
 	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION;
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION;
 	end,
-	[CONTROL_ATTACK_STEP_CHECK_MOUSE_POSITION] = function()
+	[CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
 		ControlOrder = nil;
 	end,
 };
 
 _G.Control.Attack = function(target)
-	local isNil = ControlOrder == nil;
-	if isNil then
+	local CurrentTime = LocalGameTimer();
+	if ControlOrder == nil then
 		ControlOrder = {
 			Type = CONTROL_TYPE_ATTACK;
 			Target = target,
@@ -280,16 +277,17 @@ _G.Control.Attack = function(target)
 			TargetIsHero = target.type == Obj_AI_Hero
 		};
 		ControlTypeTable[ControlOrder.Type]();
+		return true;
 	end
-	return isNil;
+	return false;
 end
 
 local ControlMoveTable = {};
 local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
-local CONTROL_MOVE_STEP_PRESS_POSITION				= 2;
-local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
+local CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION		= 2;
+local CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION	= 3;
 local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
-local CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION		= 5;
+local CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION		= 5;
 
 ControlMoveTable = {
 	[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
@@ -298,37 +296,41 @@ ControlMoveTable = {
 		else
 			LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
 		end
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION;
 	end,
-	[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
-		LocalControlKeyDown(_G.HK_TCO);
-		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN) then
-			ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+	[CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION] = function()
+		if ControlOrder.TargetPosition.z ~= nil then
+			LocalControlSetCursorPos(ControlOrder.TargetPosition);
+		else
+			LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
 		end
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION;
 	end,
-	[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
-		if LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP) then
-			LocalControlKeyUp(_G.HK_TCO);
-			if ControlOrder.TargetPosition ~= nil then
-				ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
-			else
-				ControlOrder = nil;
-			end
+	[CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION] = function()
+		LocalControlKeyDown(_G.HK_TCO);
+		LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
+		LocalControlKeyUp(_G.HK_TCO);
+		if ControlOrder.TargetPosition ~= nil then
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
+		else
+			ControlOrder = nil;
 		end
 	end,
 	[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION;
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION;
 	end,
-	[CONTROL_MOVE_STEP_CHECK_MOUSE_POSITION] = function()
+	[CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
 		ControlOrder = nil;
 	end,
 };
 
 _G.Control.Move = function(a, b, c)
-	local isNil = ControlOrder == nil;
-	if isNil then
+	if ControlOrder == nil then
 		if a and b and c then
 			ControlOrder = {
 				Type = CONTROL_TYPE_MOVE,
@@ -353,49 +355,40 @@ _G.Control.Move = function(a, b, c)
 		else
 			ControlOrder = {
 				Type = CONTROL_TYPE_MOVE,
-				NextStep = CONTROL_MOVE_STEP_PRESS_POSITION,
+				NextStep = CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION,
 				MousePosition = _G.cursorPos,
 			};
 		end
 		ControlTypeTable[ControlOrder.Type]();
+		return true;
 	end
-	return isNil;
+	return false;
 end
 
 local ControlCastSpellTable = {};
 local CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION		= 1;
-local CONTROL_CASTSPELL_STEP_PRESS_KEY					= 2;
-local CONTROL_CASTSPELL_STEP_PRESS_POSITION				= 3;
-local CONTROL_CASTSPELL_STEP_RELEASE_POSITION			= 4;
-local CONTROL_CASTSPELL_STEP_RELEASE_KEY				= 5;
-local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 6;
-local CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION		= 7;
+local CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION		= 2;
+local CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS		= 3;
+local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 4;
+local CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION		= 5;
 
 ControlCastSpellTable = {
 	[CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION] = function()
 		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
 		LocalControlSetCursorPos(position);
-		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION;
 	end,
-	[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
+	[CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION] = function()
+		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
+		LocalControlSetCursorPos(position);
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS;
+	end,
+	[CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS] = function()
 		LocalControlKeyDown(ControlOrder.Key);
 		if ControlOrder.TargetPosition ~= nil then
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_POSITION;
-		else
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+			LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
+			LocalControlMouseEvent(MOUSEEVENTF_LEFTUP);
 		end
-	end,
-	[CONTROL_CASTSPELL_STEP_PRESS_POSITION] = function()
-		if LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN) then
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_POSITION;
-		end
-	end,
-	[CONTROL_CASTSPELL_STEP_RELEASE_POSITION] = function()
-		if LocalControlMouseEvent(MOUSEEVENTF_LEFTUP) then
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
-		end
-	end,
-	[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
 		LocalControlKeyUp(ControlOrder.Key);
 		if ControlOrder.TargetPosition ~= nil then
 			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION;
@@ -406,16 +399,19 @@ ControlCastSpellTable = {
 	[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION;
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION;
 	end,
-	[CONTROL_CASTSPELL_STEP_CHECK_MOUSE_POSITION] = function()
+	[CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION] = function()
+		local position = ControlOrder.MousePosition;
+		LocalControlSetCursorPos(position.x, position.y);
 		ControlOrder = nil;
 	end,
 };
 
 _G.Control.CastSpell = function(key, a, b, c)
-	local isNil = ControlOrder == nil;
-	if isNil then
+	local CurrentTime = LocalGameTimer();
+	if ControlOrder == nil and CurrentTime > NextControlOrder then
+		NextControlOrder = CurrentTime + Utilities:GetLatency() * 1.5 + 0.08;
 		if a and b and c then
 			ControlOrder = {
 				Type = CONTROL_TYPE_CASTSPELL,
@@ -455,12 +451,13 @@ _G.Control.CastSpell = function(key, a, b, c)
 			ControlOrder = {
 				Type = CONTROL_TYPE_CASTSPELL,
 				Key = key,
-				NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY,
+				NextStep = CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS,
 			};
 		end
 		ControlTypeTable[ControlOrder.Type]();
+		return true;
 	end
-	return isNil;
+	return false;
 end
 
 ControlTypeTable = {
@@ -491,7 +488,11 @@ class "__BuffManager"
 	end
 
 	function __BuffManager:BuffIsValid(buff)
-		return buff ~= nil and buff.startTime <= LocalGameTimer() and buff.expireTime >= LocalGameTimer() and buff.count > 0;
+		if buff ~= nil and buff.count > 0 then
+			local CurrentTime = LocalGameTimer();
+			return buff.startTime <= CurrentTime and buff.expireTime >= CurrentTime;
+		end
+		return false;
 	end
 
 	function __BuffManager:CacheBuffs(unit)
@@ -1206,7 +1207,6 @@ class "__Utilities"
 			["Thresh"] = true,
 		};
 		self.DisableSpellAnimationTime = {
-			["Kalista"] = true,
 			["TwistedFate"] = true,
 		};
 		self.Slots = {
@@ -2003,7 +2003,7 @@ class "__IncomingAttack"
 		self.SourcePosition = self.Source.pos;
 		self.WindUpTime = Utilities:GetAttackDataWindUpTime(self.Source);
 		self.AnimationTime = Utilities:GetAttackDataAnimationTime(self.Source);
-		self.StartTime = Utilities:GetAttackDataEndTime(self.Source) - self.AnimationTime;--LocalGameTimer();
+		self.StartTime = Utilities:GetAttackDataEndTime(self.Source) - self.AnimationTime;
 		if self.Source.type == Obj_AI_Turret then
 			self.SourcePosition.y = self.SourcePosition.y + 14;
 			self.AnimationTime = self.AnimationTime + 0.1;
@@ -2092,16 +2092,6 @@ class "__IncomingAttack"
 			end
 		end
 		return damage;
-	end
-
-	function __IncomingAttack:Draw(target)
-		local damage = 0;
-		if not self:ShouldRemove() then
-			local timeTillHit = self.StartTime + self.WindUpTime + self:GetMissileTime(target) - LocalGameTimer();
-			if timeTillHit <= 0 and timeTillHit > -0.25 then
-				LocalDrawText("Will Hit: " .. timeTillHit, target.pos:To2D());
-			end
-		end
 	end
 
 class "__TargetSelector"
@@ -2851,6 +2841,8 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnUpdate()
+		local CurrentTime = LocalGameTimer();
+
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
 			self.SpellWindUpTime = Utilities:GetActiveSpellWindUpTime(myHero);
@@ -2861,8 +2853,8 @@ class "__Orbwalker"
 		local SpecialAutoAttacks = self.SpecialAutoAttacks[myHero.charName];
 		if SpecialAutoAttacks ~= nil then
 			if Utilities:IsCastingSpell(myHero) and SpecialAutoAttacks[Utilities:GetActiveSpellName(myHero)] ~= nil then
-				if self.CustomEndTime < LocalGameTimer() then
-					self.CustomEndTime = LocalGameTimer() + self.SpellAnimationTime;
+				if self.CustomEndTime < CurrentTime then
+					self.CustomEndTime = CurrentTime + self.SpellAnimationTime;
 				end
 			end
 		end
@@ -2881,6 +2873,7 @@ class "__Orbwalker"
 				self.AutoAttackResetCastTime = castTime;
 			end
 		end
+
 		local endTime = self:GetAttackDataEndTime(myHero);
 		if self.MyHeroEndTime < endTime then
 			self:__OnAttack();
@@ -2917,7 +2910,7 @@ class "__Orbwalker"
 		if (not self.IsNone) then
 			self:Orbwalk();
 		end
-		if self.LastHoldPosition > 0 and LocalGameTimer() - self.LastHoldPosition > 0.025 then
+		if self.LastHoldPosition > 0 and CurrentTime - self.LastHoldPosition > 0.025 then
 			LocalControlKeyUp(72);
 			self.LastHoldPosition = 0;
 		end
@@ -2985,7 +2978,8 @@ class "__Orbwalker"
 		if (not self.Movement) or (not self:CanMove()) then
 			return;
 		end
-		if LocalGameTimer() - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
+		local CurrentTime = LocalGameTimer();
+		if CurrentTime - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
 			if self.Menu.General.FastKiting:Value() then
 				if self.FastKiting then
 					self.FastKiting = false;
@@ -3022,12 +3016,12 @@ class "__Orbwalker"
 				if args.Target == _G.mousePos then
 					local boolean = _G.Control.Move();
 					if boolean == nil or boolean == true then
-						self.LastMovementSent = LocalGameTimer();
+						self.LastMovementSent = CurrentTime;
 					end
 				else
 					local boolean = _G.Control.Move(args.Target);
 					if boolean == nil or boolean == true then
-						self.LastMovementSent = LocalGameTimer();
+						self.LastMovementSent = CurrentTime;
 					end
 				end
 				return;
@@ -3037,7 +3031,7 @@ class "__Orbwalker"
 			if self.HoldPosition == nil or (not (self.HoldPosition == myHero.pos)) then
 				LocalControlKeyDown(72);
 				self.HoldPosition = myHero.pos;
-				self.LastHoldPosition = LocalGameTimer();
+				self.LastHoldPosition = CurrentTime;
 			end
 		end
 	end
@@ -3135,7 +3129,7 @@ class "__Orbwalker"
 		end
 		]]
 		--LocalDrawText(self.CustomEndTime .. " " .. self:GetAttackDataEndTime(), myHero.pos:To2D())
-		--LocalDrawText("CanMove: " .. tostring(self:CanMove()) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", IsWaitingResponseFromServer: " .. tostring(self:IsWaitingResponseFromServer()), myHero.pos:To2D())
+		--LocalDrawText("CanMove: " .. tostring(self:CanMove()) .. ", IsAutoAttacking: " .. tostring(self:IsAutoAttacking(myHero)) .. ", CanAttack: " .. tostring(self:CanAttack()) .. ", IsWaitingResponseFromServer: " .. tostring(self:IsWaitingResponseFromServer()), myHero.pos:To2D())
 		--[[
 		local minions = {};
 		local t = ObjectManager:GetEnemyHeroes(1500);
@@ -3245,13 +3239,13 @@ class "__Orbwalker"
 	
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
-		local IsAutoAttacking = self:IsAutoAttacking(unit);
 		if unit.isMe then
 			if self:IsWaitingResponseFromServer() then
-				if not IsAutoAttacking then
-					return false;
-				end
+				return false;
 			end
+		end
+		if unit.charName == "Kalista" then
+			return true;
 		end
 		if Utilities:IsChanneling(unit) then
 			if self.AllowMovement[unit.charName] == nil or (not self.AllowMovement[unit.charName](unit)) then
@@ -3262,7 +3256,7 @@ class "__Orbwalker"
 		--		return false;
 		--	end
 		end
-		return not IsAutoAttacking;
+		return not self:IsAutoAttacking(unit);
 	end
 
 	function __Orbwalker:CanAttack(unit)
@@ -3279,9 +3273,7 @@ class "__Orbwalker"
 		end
 		if unit.isMe then
 			if self:IsWaitingResponseFromServer() then
-				if not self:IsAutoAttacking(unit) then
-					return false;
-				end
+				return false;
 			end
 		end
 		return self:CanIssueOrder(unit);
@@ -3504,33 +3496,20 @@ class "__Orbwalker"
 
 		local IsUnderTurret = {};
 		local UnderTurretMinions = {};
+		local CachedDistanceSquared = {};
 		if nearestTurret ~= nil then
-			local CachedDistanceSquared = {};
 			for i = 1, #EnemyMinionsInAutoAttackRange do
-				local minion = EnemyMinionsInAutoAttackRange[i];
-				local range = Utilities:GetAutoAttackRange(nearestTurret, minion);
-				local distanceSquared = Utilities:GetDistanceSquared(nearestTurret, minion.posTo);
-				CachedDistanceSquared[minion.networkID] = distanceSquared;
+				local EnemyMinion = EnemyMinionsInAutoAttackRange[i];
+				local range = Utilities:GetAutoAttackRange(nearestTurret, EnemyMinion);
+				local distanceSquared = Utilities:GetDistanceSquared(nearestTurret, EnemyMinion);
+				CachedDistanceSquared[EnemyMinion.networkID] = distanceSquared;
 				if distanceSquared <= range * range then
-					IsUnderTurret[minion.networkID] = true;
-					Linq:Add(UnderTurretMinions, minion);
+					IsUnderTurret[EnemyMinion.networkID] = true;
+					Linq:Add(UnderTurretMinions, EnemyMinion);
 				else
-					IsUnderTurret[minion.networkID] = false;
+					IsUnderTurret[EnemyMinion.networkID] = false;
 				end
 			end
-			local turretTarget = Utilities:GetAttackDataTarget(nearestTurret);
-			LocalTableSort(UnderTurretMinions, function(a, b)
-				if a.handle == turretTarget then
-					return true;
-				elseif b.handle == turretTarget then
-					return false;
-				end
-				if a.maxHealth == b.maxHealth then
-					return CachedDistanceSquared[a.networkID] < CachedDistanceSquared[b.networkID];
-				else
-					return a.maxHealth > b.maxHealth;
-				end
-			end);
 		end
 
 		local UnkillableMinions = {};
@@ -3541,21 +3520,21 @@ class "__Orbwalker"
 		local OrbwalkerMinionsHash = {};
 		local IsMelee = Utilities:IsMelee(myHero);
 		local MissileSpeed = Utilities:GetAttackDataProjectileSpeed(myHero);
-		local extraTime = 0;--TODO (not self:CanIssueOrder()) and LocalMathMax(0, Utilities:GetAttackDataEndTime(myHero) - LocalGameTimer()) or 0;
+		local extraTime = 0;
 		local maxMissileTravelTime = IsMelee and 0 or (Utilities:GetAutoAttackRange(myHero) / MissileSpeed);
 		local ExtraFarmDelay = self.Menu.Farming.ExtraFarmDelay:Value() * 0.001;
 		local boundingRadius = 0;--myHero.boundingRadius;
 		local windUpTime = self:GetWindUpTime(myHero);
 		local animationTime = self:GetAnimationTime(myHero);
 		for i = 1, #EnemyMinionsInAutoAttackRange do
-			local minion = EnemyMinionsInAutoAttackRange[i];
-			local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, minion) - boundingRadius, 0) / MissileSpeed);
-			local orbwalkerMinion = __OrbwalkerMinion(minion);
-			orbwalkerMinion.LastHitTime = windUpTime + ExtraFarmDelay + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, minion) - Utilities:GetAutoAttackRange(myHero, minion)) / myHero.ms);
+			local EnemyMinion = EnemyMinionsInAutoAttackRange[i];
+			local missileTravelTime = IsMelee and 0 or (LocalMathMax(Utilities:GetDistance(myHero, EnemyMinion) - boundingRadius, 0) / MissileSpeed);
+			local orbwalkerMinion = __OrbwalkerMinion(EnemyMinion);
+			orbwalkerMinion.LastHitTime = windUpTime + ExtraFarmDelay + missileTravelTime + extraTime; -- + LocalMathMax(0, 2 * (Utilities:GetDistance(myHero, EnemyMinion) - Utilities:GetAutoAttackRange(myHero, EnemyMinion)) / myHero.ms);
 			orbwalkerMinion.LaneClearTime = animationTime + windUpTime + ExtraFarmDelay + maxMissileTravelTime + 0.1;
-			OrbwalkerMinionsHash[minion.handle] = orbwalkerMinion;
-			if not IsUnderTurret[minion.networkID] and HealthPrediction.AlliesSearchingTargetDamage[minion.networkID] ~= nil then
-				orbwalkerMinion.LaneClearHealth = orbwalkerMinion.LaneClearHealth - HealthPrediction.AlliesSearchingTargetDamage[minion.networkID];
+			OrbwalkerMinionsHash[EnemyMinion.handle] = orbwalkerMinion;
+			if not IsUnderTurret[EnemyMinion.networkID] and HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID] ~= nil then
+				orbwalkerMinion.LaneClearHealth = orbwalkerMinion.LaneClearHealth - HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID];
 			end
 		end
 
@@ -3637,29 +3616,89 @@ class "__Orbwalker"
 			break;
 		end
 
+		local CurrentTime = LocalGameTimer();
+
 		if self.AlmostLastHitMinion ~= nil then
-			self.LastShouldWait = LocalGameTimer();
+			self.LastShouldWait = CurrentTime;
 		end
 
 		local LaneClearMinionsUnderTurret = {};
 		if nearestTurret ~= nil then
-			local CurrentTime = LocalGameTimer();
 			local AutoAttackArrivals = {};
-
-			local myHeroMissileTravelTime = windUpTime + maxMissileTravelTime;
+			local UnderTurretMinionsHash = {};
 			for i = 1, #UnderTurretMinions do
-				local minion = UnderTurretMinions[i];
-				AutoAttackArrivals[minion.networkID] = {};
-				local myHeroMinionHealth = minion.health;
-				local myHeroDamage = self:GetAutoAttackDamage(minion);
-				local myHeroNextAutoAttackArrival = CurrentTime + self:GetAttackOrderDelay();
-				while myHeroMinionHealth > 0 do
-					myHeroNextAutoAttackArrival = myHeroNextAutoAttackArrival + myHeroMissileTravelTime;
-					Linq:Add(AutoAttackArrivals[minion.networkID], { isMe = true, ArrivalTime = myHeroNextAutoAttackArrival, Damage = myHeroDamage });
-					myHeroMinionHealth = myHeroMinionHealth - myHeroDamage;
-					if myHeroMinionHealth > 0 then
-						myHeroNextAutoAttackArrival = myHeroNextAutoAttackArrival - myHeroMissileTravelTime + animationTime;
+				local EnemyMinion = UnderTurretMinions[i];
+				AutoAttackArrivals[EnemyMinion.networkID] = {};
+				UnderTurretMinionsHash[EnemyMinion.handle] = EnemyMinion;
+			end
+
+			local AllyMinions = ObjectManager:GetAllyMinions(1500);
+			local AllyMinionsTarget = {};
+
+			for i = 1, #AllyMinions do
+				local AllyMinion = AllyMinions[i];
+				local AllyTarget = Utilities:GetAttackDataTarget(AllyMinion);
+				if AllyTarget ~= nil and AllyTarget > 0 then
+					AllyMinionsTarget[AllyTarget] = true;
+					local EnemyMinion = UnderTurretMinionsHash[AllyTarget];
+					if EnemyMinion ~= nil then
+						local AllyDamage = Damage:GetAutoAttackDamage(AllyMinion, EnemyMinion);
+						local AllyWindUpTime = Utilities:GetAttackDataWindUpTime(AllyMinion);
+						local AllyAnimationTime = Utilities:GetAttackDataAnimationTime(AllyMinion);
+						local AllyEndTime = Utilities:GetAttackDataEndTime(AllyMinion);
+						local AllyStartTime = 0;
+						if AllyEndTime > CurrentTime then
+							AllyStartTime = AllyEndTime - AllyAnimationTime;
+						else
+							AllyStartTime = AllyEndTime;
+						end
+						local EnemyMinionHealth = EnemyMinion.health;
+						local AllyMissileTravelTime = Utilities:IsMelee(AllyMinion) and 0 or (Utilities:GetDistance(AllyMinion, EnemyMinion) / Utilities:GetAttackDataProjectileSpeed(AllyMinion));
+						local AllyNextAutoAttackArrival = AllyStartTime + AllyWindUpTime + AllyMissileTravelTime;
+						while EnemyMinionHealth > 0 do
+							EnemyMinionHealth = EnemyMinionHealth - AllyDamage;
+							Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = AllyMinion.networkID, ArrivalTime = AllyNextAutoAttackArrival, Damage = AllyDamage });
+							AllyNextAutoAttackArrival = AllyNextAutoAttackArrival + AllyAnimationTime;
+						end
 					end
+				end
+			end
+
+			local MinionsPriority = {};
+			local turretTarget = Utilities:GetAttackDataTarget(nearestTurret);
+			for i = 1, #UnderTurretMinions do
+				local EnemyMinion = UnderTurretMinions[i];
+				local Priority = 2;
+				if EnemyMinion.handle == turretTarget then
+					Priority = 3;
+				elseif AllyMinionsTarget[EnemyMinion.handle] ~= nil or HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID] ~= nil then
+					Priority = 1;
+				end
+				MinionsPriority[EnemyMinion.networkID] = Priority;
+			end
+
+			LocalTableSort(UnderTurretMinions, function(a, b)
+				if MinionsPriority[a.networkID] == MinionsPriority[b.networkID] then
+					if a.maxHealth == b.maxHealth then
+						return CachedDistanceSquared[a.networkID] < CachedDistanceSquared[b.networkID];
+					else
+						return a.maxHealth > b.maxHealth;
+					end
+				else
+					return MinionsPriority[a.networkID] > MinionsPriority[b.networkID];
+				end
+			end);
+
+			for i = 1, #UnderTurretMinions do
+				local EnemyMinion = UnderTurretMinions[i];
+				local EnemyMinionHealth = EnemyMinion.health;
+				local myHeroDamage = self:GetAutoAttackDamage(EnemyMinion);
+				local myHeroMissileTravelTime = Utilities:IsMelee(myHero) and 0 or (Utilities:GetDistance(myHero, EnemyMinion) / MissileSpeed);
+				local myHeroNextAutoAttackArrival = CurrentTime + self:GetAttackOrderDelay() + windUpTime + myHeroMissileTravelTime;
+				while EnemyMinionHealth > 0 do
+					EnemyMinionHealth = EnemyMinionHealth - myHeroDamage;
+					Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = myHero.networkID, ArrivalTime = myHeroNextAutoAttackArrival, Damage = myHeroDamage });
+					myHeroNextAutoAttackArrival = myHeroNextAutoAttackArrival + animationTime;
 				end
 			end
 
@@ -3679,16 +3718,16 @@ class "__Orbwalker"
 			local index = 1;
 			local turretMissileTravelTime = -1;
 			while index <= #UnderTurretMinions do
-				local minion = UnderTurretMinions[index];
+				local EnemyMinion = UnderTurretMinions[index];
 				if turretMinionHealth <= 0 then
-					turretMinionHealth = minion.health;
-					turretDamage = Damage:GetAutoAttackDamage(nearestTurret, minion);
-					turretMissileTravelTime = Utilities:GetDistance(nearestTurret, minion) / turretProjectileSpeed;
+					turretMinionHealth = EnemyMinion.health;
+					turretDamage = Damage:GetAutoAttackDamage(nearestTurret, EnemyMinion);
+					turretMissileTravelTime = Utilities:GetDistance(nearestTurret, EnemyMinion) / turretProjectileSpeed;
 				end
 
 				local turretAttackTravelTime = turretWindUpTime + turretMissileTravelTime;
 				turretNextAutoAttackArrival = turretNextAutoAttackArrival + turretAttackTravelTime;
-				Linq:Add(AutoAttackArrivals[minion.networkID], { isMe = false, ArrivalTime = turretNextAutoAttackArrival, Damage = turretDamage });
+				Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = nearestTurret.networkID, ArrivalTime = turretNextAutoAttackArrival, Damage = turretDamage });
 				turretMinionHealth = turretMinionHealth - turretDamage;
 				if turretMinionHealth <= 0 then
 					index = index + 1;
@@ -3696,34 +3735,37 @@ class "__Orbwalker"
 				turretNextAutoAttackArrival = turretNextAutoAttackArrival - turretAttackTravelTime + turretAnimationTime;
 			end
 
+			local MinionsUnderTurretAttack = {};
+
 			for i = 1, #UnderTurretMinions do
-				local minion = UnderTurretMinions[i];
-				local minionHealth = minion.health;
-				if LaneClearMinionsUnderTurretHash[minion.networkID] then
-					local AutoAttacks = AutoAttackArrivals[minion.networkID];
+				local EnemyMinion = UnderTurretMinions[i];
+				local EnemyMinionHealth = EnemyMinion.health;
+				if LaneClearMinionsUnderTurretHash[EnemyMinion.networkID] then
+					local AutoAttacks = AutoAttackArrivals[EnemyMinion.networkID];
 					LocalTableSort(AutoAttacks, function(a, b)
 						return a.ArrivalTime < b.ArrivalTime;
 					end);
-					local TurretWillAttack = false;
+					local TurretAttackCount = 0;
+					local MyHeroAttackCount = 0;
 					for j = 1, #AutoAttacks do
 						local AutoAttack = AutoAttacks[j];
-						if not AutoAttack.isMe then
-							TurretWillAttack = true;
+						if AutoAttack.networkID == myHero.networkID then
+							MyHeroAttackCount = MyHeroAttackCount + 1;
+						elseif AutoAttack.networkID == nearestTurret.networkID then
+							TurretAttackCount = TurretAttackCount + 1;
 						end
-						minionHealth = minionHealth - AutoAttack.Damage;
-						if minionHealth <= 0 then
-							if AutoAttack.isMe then
-								if TurretWillAttack then
-									if AutoAttacks[1].isMe then
-										if self.UnderTurretMinion == nil then
-											self.UnderTurretMinion = minion;
-										end
+						EnemyMinionHealth = EnemyMinionHealth - AutoAttack.Damage;
+						if EnemyMinionHealth <= 0 then
+							if TurretAttackCount > 0 then
+								if AutoAttack.networkID == myHero.networkID and MyHeroAttackCount > 1 then
+									if self.UnderTurretMinion == nil then
+										self.UnderTurretMinion = EnemyMinion;
 									end
-								else
-									local orbwalkerMinion = OrbwalkerMinionsHash[minion.handle];
-									if orbwalkerMinion:IsLaneClearable() then
-										Linq:Add(LaneClearMinionsUnderTurret, orbwalkerMinion);
-									end
+								end
+							else
+								local orbwalkerMinion = OrbwalkerMinionsHash[EnemyMinion.handle];
+								if orbwalkerMinion:IsLaneClearable() then
+									Linq:Add(LaneClearMinionsUnderTurret, orbwalkerMinion);
 								end
 							end
 							break;
