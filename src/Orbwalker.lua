@@ -233,7 +233,7 @@ local CONTROL_TYPE_MOVE				= 2;
 local CONTROL_TYPE_CASTSPELL		= 3;
 local ControlTypeTable = {};
 local NextControlOrder = 0;
-local SET_CURSOR_POS_DELAY = 0.05;
+local MAXIMUM_MOUSE_DISTANCE_SQUARED = 120 * 120;
 
 local ControlAttackTable = {};
 local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
@@ -265,12 +265,14 @@ ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep =CONTROL_ATTACK_STEP_FINISH;
-		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_FINISH;
 	end,
 	[CONTROL_ATTACK_STEP_FINISH] = function()
-		if LocalGameTimer() > ControlOrder.NextOrder then
+		if Utilities:GetDistance2DSquared(ControlOrder.MousePosition, _G.cursorPos) <= MAXIMUM_MOUSE_DISTANCE_SQUARED then
 			ControlOrder = nil;
+		else
+			--print("error");
+			ControlOrder.NextStep = CONTROL_ATTACK_STEP_SET_MOUSE_POSITION;
 		end
 	end,
 };
@@ -282,7 +284,7 @@ _G.Control.Attack = function(target)
 			Type = CONTROL_TYPE_ATTACK;
 			Target = target,
 			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
-			MousePosition = _G.mousePos:To2D(),
+			MousePosition = _G.cursorPos,
 			TargetIsHero = target.type == Obj_AI_Hero
 		};
 		ControlTypeTable[ControlOrder.Type]();
@@ -386,16 +388,14 @@ ControlCastSpellTable = {
 		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
 		LocalControlSetCursorPos(position);
 		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
-		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
 	end,
 	[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
-		if LocalGameTimer() > ControlOrder.NextOrder then
-			LocalControlKeyDown(ControlOrder.Key);
-			if ControlOrder.TargetPosition ~= nil then
-				LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
-			end
-			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+		LocalControlKeyDown(ControlOrder.Key);
+		if ControlOrder.TargetPosition ~= nil then
+			LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
 		end
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+
 	end,
 	[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
 		if ControlOrder.TargetPosition ~= nil then
@@ -412,11 +412,13 @@ ControlCastSpellTable = {
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
 		ControlOrder.NextStep =  CONTROL_CASTSPELL_STEP_FINISH;
-		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
 	end,
 	[CONTROL_CASTSPELL_STEP_FINISH] = function()
-		if LocalGameTimer() > ControlOrder.NextOrder then
+		if Utilities:GetDistance2DSquared(ControlOrder.MousePosition, _G.cursorPos) <= MAXIMUM_MOUSE_DISTANCE_SQUARED then
 			ControlOrder = nil;
+		else
+			--print("error");
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION;
 		end
 	end,
 };
@@ -3055,7 +3057,6 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnDraw()
-
 		if self.Menu.Drawings.Range:Value() then
 			LocalDrawCircle(myHero.pos, Utilities:GetAutoAttackRange(myHero), 2, COLOR_LIGHT_GREEN);
 		end
