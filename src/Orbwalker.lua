@@ -81,6 +81,7 @@ _G.SDK = {
 	Orbwalker 						= nil,
 };
 local LocalVector					= Vector;
+local LocalOsClock					= os.clock;
 local LocalCallbackAdd				= Callback.Add;
 local LocalCallbackDel				= Callback.Del;
 local LocalDrawLine					= Draw.Line;
@@ -160,6 +161,8 @@ local LocalMathMin					= math.min;
 local LocalMathSqrt					= math.sqrt;
 local LocalMathHuge					= math.huge;
 local LocalMathAbs					= math.abs;
+local LocalStringSub				= string.sub;
+local LocalStringLen				= string.len;
 
 local EPSILON						= 1E-12;
 
@@ -224,30 +227,35 @@ LocalCallbackAdd('Load', function()
 	end);
 end);
 
-
 local ControlOrder = nil;
 local CONTROL_TYPE_ATTACK			= 1;
 local CONTROL_TYPE_MOVE				= 2;
 local CONTROL_TYPE_CASTSPELL		= 3;
 local ControlTypeTable = {};
 local NextControlOrder = 0;
+local SET_CURSOR_POS_DELAY = 0.05;
 
 local ControlAttackTable = {};
 local CONTROL_ATTACK_STEP_SET_TARGET_POSITION		= 1;
-local CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET	= 2;
+local CONTROL_ATTACK_STEP_PRESS_TARGET				= 2;
+local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
 local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
-local CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION		= 5;
+local CONTROL_ATTACK_STEP_FINISH					= 5;
 
 ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
+		local CurrentTime = LocalGameTimer();
 		LocalControlSetCursorPos(ControlOrder.Target.pos);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET;
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
 	end,
-	[CONTROL_ATTACK_STEP_PRESS_AND_RELEASE_TARGET] = function()
+	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
 		if ControlOrder.TargetIsHero then
 			LocalControlKeyDown(_G.HK_TCO);
 		end
 		LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
+	end,
+	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
 		LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
 		if ControlOrder.TargetIsHero then
 			LocalControlKeyUp(_G.HK_TCO);
@@ -257,12 +265,13 @@ ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION;
+		ControlOrder.NextStep =CONTROL_ATTACK_STEP_FINISH;
+		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
 	end,
-	[CONTROL_ATTACK_STEP_RE_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder = nil;
+	[CONTROL_ATTACK_STEP_FINISH] = function()
+		if LocalGameTimer() > ControlOrder.NextOrder then
+			ControlOrder = nil;
+		end
 	end,
 };
 
@@ -273,7 +282,7 @@ _G.Control.Attack = function(target)
 			Type = CONTROL_TYPE_ATTACK;
 			Target = target,
 			NextStep = CONTROL_ATTACK_STEP_SET_TARGET_POSITION,
-			MousePosition = _G.cursorPos,
+			MousePosition = _G.mousePos:To2D(),
 			TargetIsHero = target.type == Obj_AI_Hero
 		};
 		ControlTypeTable[ControlOrder.Type]();
@@ -367,26 +376,29 @@ end
 
 local ControlCastSpellTable = {};
 local CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION		= 1;
-local CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION		= 2;
-local CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS		= 3;
+local CONTROL_CASTSPELL_STEP_PRESS_KEY 					= 2;
+local CONTROL_CASTSPELL_STEP_RELEASE_KEY 				= 3;
 local CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION			= 4;
-local CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION		= 5;
+local CONTROL_CASTSPELL_STEP_FINISH						= 5;
 
 ControlCastSpellTable = {
 	[CONTROL_CASTSPELL_STEP_SET_TARGET_POSITION] = function()
 		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
 		LocalControlSetCursorPos(position);
-		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION;
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY;
+		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
 	end,
-	[CONTROL_CASTSPELL_STEP_RE_SET_TARGET_POSITION] = function()
-		local position = ControlOrder.Target ~= nil and ControlOrder.Target.pos or ControlOrder.TargetPosition;
-		LocalControlSetCursorPos(position);
-		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS;
+	[CONTROL_CASTSPELL_STEP_PRESS_KEY] = function()
+		if LocalGameTimer() > ControlOrder.NextOrder then
+			LocalControlKeyDown(ControlOrder.Key);
+			if ControlOrder.TargetPosition ~= nil then
+				LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
+			end
+			ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
+		end
 	end,
-	[CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS] = function()
-		LocalControlKeyDown(ControlOrder.Key);
+	[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
 		if ControlOrder.TargetPosition ~= nil then
-			LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
 			LocalControlMouseEvent(MOUSEEVENTF_LEFTUP);
 		end
 		LocalControlKeyUp(ControlOrder.Key);
@@ -399,12 +411,13 @@ ControlCastSpellTable = {
 	[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION;
+		ControlOrder.NextStep =  CONTROL_CASTSPELL_STEP_FINISH;
+		ControlOrder.NextOrder = LocalGameTimer() + SET_CURSOR_POS_DELAY;
 	end,
-	[CONTROL_CASTSPELL_STEP_RE_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder = nil;
+	[CONTROL_CASTSPELL_STEP_FINISH] = function()
+		if LocalGameTimer() > ControlOrder.NextOrder then
+			ControlOrder = nil;
+		end
 	end,
 };
 
@@ -451,7 +464,7 @@ _G.Control.CastSpell = function(key, a, b, c)
 			ControlOrder = {
 				Type = CONTROL_TYPE_CASTSPELL,
 				Key = key,
-				NextStep = CONTROL_CASTSPELL_STEP_PRESS_AND_RELEASE_KEYS,
+				NextStep = CONTROL_CASTSPELL_STEP_PRESS_KEY,
 			};
 		end
 		ControlTypeTable[ControlOrder.Type]();
@@ -1458,8 +1471,12 @@ class "__Utilities"
 		return unit.activeSpell.valid;
 	end
 
+	function __Utilities:StringEndsWith(str, word)
+		return LocalStringSub(str, - LocalStringLen(word)) == word;
+	end
+
 	function __Utilities:IsAutoAttack(name)
-		return name:lower():find("basicattack") or self.SpecialAutoAttacks[name] ~= nil;
+		return (name:lower():find("attack")) or self.SpecialAutoAttacks[name] ~= nil;
 	end
 
 	function __Utilities:IsAutoAttacking(unit)
@@ -2429,7 +2446,11 @@ class "__TargetSelector"
 				for i = 1, #t do
 					local hero = t[i];
 					if Utilities:IsInRange(hero.pos, _G.mousePos, 100) then
-						self.SelectedTarget = hero;
+						if Utilities:IdEquals(self.SelectedTarget, hero) then
+							self.SelectedTarget = nil;
+						else
+							self.SelectedTarget = hero;
+						end
 						break;
 					end
 				end
@@ -2662,7 +2683,6 @@ class "__Orbwalker"
 			["DrMundo"] = { Slot = _E },
 			["Elise"] = { Slot = _W, Name = "EliseSpiderW"},
 			["Fiora"] = { Slot = _E },
-			["Gangplank"] = { Slot = _Q },
 			["Garen"] = { Slot = _Q },
 			["Graves"] = { Slot = _E },
 			["Kassadin"] = { Slot = _W },
@@ -2684,8 +2704,6 @@ class "__Orbwalker"
 			["Riven"] = { Slot = _Q },
 			["Sejuani"] = { Slot = _W },
 			["Sivir"] = { Slot = _W },
-			["Talon"] = { Slot = _Q },
-			["Teemo"] = { Slot = _Q },
 			["Trundle"] = { Slot = _Q },
 			["Vayne"] = { Slot = _Q },
 			["Vi"] = { Slot = _E },
@@ -3037,29 +3055,30 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:OnDraw()
+
 		if self.Menu.Drawings.Range:Value() then
-			LocalDrawCircle(myHero.pos, Utilities:GetAutoAttackRange(myHero), COLOR_LIGHT_GREEN);
+			LocalDrawCircle(myHero.pos, Utilities:GetAutoAttackRange(myHero), 2, COLOR_LIGHT_GREEN);
 		end
 		if self.Menu.Drawings.HoldRadius:Value() then
-			LocalDrawCircle(myHero.pos, self.Menu.General.HoldRadius:Value(), COLOR_LIGHT_GREEN);
+			LocalDrawCircle(myHero.pos, self.Menu.General.HoldRadius:Value(), 2, COLOR_LIGHT_GREEN);
 		end
 		if self.Menu.Drawings.EnemyRange:Value() then
 			local t = ObjectManager:GetEnemyHeroes();
 			for i = 1, #t do
 				local enemy = t[i];
 				local range = Utilities:GetAutoAttackRange(enemy, myHero);
-				LocalDrawCircle(enemy.pos, range, Utilities:IsInRange(enemy, myHero, range) and COLOR_ORANGE_RED or COLOR_LIGHT_GREEN);
+				LocalDrawCircle(enemy.pos, range, 2, Utilities:IsInRange(enemy, myHero, range) and COLOR_ORANGE_RED or COLOR_LIGHT_GREEN);
 			end
 		end
 		if self.Menu.Drawings.LastHittableMinions:Value() then
 			if self.LastHitMinion ~= nil then
-				LocalDrawCircle(self.LastHitMinion.pos, LocalMathMax(65, self.LastHitMinion.boundingRadius), COLOR_WHITE);
+				LocalDrawCircle(self.LastHitMinion.pos, LocalMathMax(65, self.LastHitMinion.boundingRadius), 2, COLOR_WHITE);
 			end
 			if self.AlmostLastHitMinion ~= nil and not Utilities:IdEquals(self.AlmostLastHitMinion, self.LastHitMinion) then
-				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), COLOR_ORANGE_RED);
+				LocalDrawCircle(self.AlmostLastHitMinion.pos, LocalMathMax(65, self.AlmostLastHitMinion.boundingRadius), 2, COLOR_ORANGE_RED);
 			end
 			if self.UnderTurretMinion ~= nil then
-				LocalDrawCircle(self.UnderTurretMinion.pos, LocalMathMax(65, self.UnderTurretMinion.boundingRadius), COLOR_YELLOW);
+				LocalDrawCircle(self.UnderTurretMinion.pos, LocalMathMax(65, self.UnderTurretMinion.boundingRadius), 2, COLOR_YELLOW);
 			end
 		end
 		--[[
