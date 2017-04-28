@@ -29,6 +29,7 @@
         :RegisterMenuKey(mode: enum, key: menu) -- _G.SDK.Orbwalker:RegisterMenuKey(_G.SDK.ORBWALKER_MODE_COMBO, Menu.Keys.Combo); Only needed for extra keys
 
     _G.SDK.TargetSelector
+    	.SelectedTarget -- unit
         :GetTarget(enemies: table, damageType: enum) -- returns a unit or nil
         :GetTarget(range: number, damageType: enum) -- local target = _G.SDK.TargetSelector:GetTarget(1000, _G.SDK.DAMAGE_TYPE_PHYSICAL);
 
@@ -2404,6 +2405,7 @@ class "__TargetSelector"
 					self.Menu.Priorities:MenuElement({ id = hero.charName, name = hero.charName, value = priority, min = 1, max = 5, step = 1 });
 				end
 			end
+			--[[
 			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = false, callback = function()
 				if self.Loaded then
 					if self.Menu.Priorities.Reset:Value() then
@@ -2415,10 +2417,12 @@ class "__TargetSelector"
 					end
 				end
 			end });
+			]]
 		end
 
 		self.Menu:MenuElement({ id = "Advanced", name = "Advanced", type = MENU });
 			self.Menu.Advanced:MenuElement({ id = "SelectedTarget", name = "Enable Select Target Manually", value = true });
+			self.Menu.Advanced:MenuElement({ id = "OnlySelectedTarget", name = "Only Attack Selected Target", value = false });
 			--TODO
 
 		self.Menu:MenuElement({ id = "Drawings", name = "Drawings", type = MENU });
@@ -2437,6 +2441,12 @@ class "__TargetSelector"
 		if self.Menu.Drawings.SelectedTarget:Value() then
 			if self.Menu.Advanced.SelectedTarget:Value() and Utilities:IsValidTarget(self.SelectedTarget) then
 				LocalDrawCircle(self.SelectedTarget.pos, 120, 4, COLOR_RED);
+				if self.Menu.Advanced.OnlySelectedTarget:Value() then
+					local screenPos = self.SelectedTarget.pos:To2D();
+					screenPos.x = screenPos.x - self.SelectedTarget.boundingRadius + 20;
+					screenPos.y = screenPos.y + 30;
+					LocalDrawText("ONLY TARGET", 20, screenPos, COLOR_RED);
+				end
 			end
 		end
 	end
@@ -2490,6 +2500,13 @@ class "__TargetSelector"
 			return nil;
 		end
 		if type(a) == "table" then
+			local SelectedTargetIsValid = self.Menu.Advanced.SelectedTarget:Value() and Utilities:IsValidTarget(self.SelectedTarget);
+			if SelectedTargetIsValid and self.Menu.Advanced.OnlySelectedTarget:Value() then
+				local screenPos = self.SelectedTarget.pos:To2D();
+				if screenPos.onScreen then
+					return self.SelectedTarget;
+				end
+			end
 			local targets = a;
 			local validTargets = {};
 			for i = 1, #targets do
@@ -2507,7 +2524,7 @@ class "__TargetSelector"
 			if #targets == 1 then
 				return targets[1];
 			end
-			if self.Menu.Advanced.SelectedTarget:Value() and Utilities:IsValidTarget(self.SelectedTarget) then
+			if SelectedTargetIsValid then
 				for i = 1, #targets do
 					if Utilities:IdEquals(targets[i], self.SelectedTarget) then
 						return self.SelectedTarget;
