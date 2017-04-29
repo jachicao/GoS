@@ -3513,8 +3513,6 @@ class "__Orbwalker"
 	end
 
 	function __Orbwalker:CalculateLastHittableMinions()
-		local EnemyMinionsInAutoAttackRange = ObjectManager:GetEnemyMinionsInAutoAttackRange();
-
 		local allyTurrets = ObjectManager:GetAllyTurrets();
 		local nearestTurret = nil;
 		local nearestDistance = LocalMathHuge;
@@ -3531,12 +3529,21 @@ class "__Orbwalker"
 			end
 		end
 
+		local EnemyMinions = ObjectManager:GetEnemyMinions(1500);
+		local EnemyMinionsInAutoAttackRange = {};
+
 		local IsUnderTurret = {};
 		local UnderTurretMinions = {};
+		local UnderTurretMinionsHash = {};
 		local CachedDistanceSquared = {};
-		if nearestTurret ~= nil then
-			for i = 1, #EnemyMinionsInAutoAttackRange do
-				local EnemyMinion = EnemyMinionsInAutoAttackRange[i];
+		local AutoAttackArrivals = {};
+
+		for i = 1, #EnemyMinions do
+			local EnemyMinion = EnemyMinions[i];
+			if Utilities:IsInAutoAttackRange(myHero, EnemyMinion) then
+				Linq:Add(EnemyMinionsInAutoAttackRange, EnemyMinion);
+			end
+			if nearestTurret ~= nil then
 				local range = Utilities:GetAutoAttackRange(nearestTurret, EnemyMinion);
 				local distanceSquared = Utilities:GetDistanceSquared(nearestTurret, EnemyMinion);
 				CachedDistanceSquared[EnemyMinion.networkID] = distanceSquared;
@@ -3546,7 +3553,9 @@ class "__Orbwalker"
 				else
 					IsUnderTurret[EnemyMinion.networkID] = false;
 				end
+				UnderTurretMinionsHash[EnemyMinion.handle] = EnemyMinion;
 			end
+			AutoAttackArrivals[EnemyMinion.networkID] = {};
 		end
 
 		local UnkillableMinions = {};
@@ -3586,22 +3595,17 @@ class "__Orbwalker"
 			end
 		end
 
+		local NotLastHittableMinionsUnderTurret = {};
 		local AlmostLastHitMinionsUnderTurret = {};
-		local LaneClearMinionsUnderTurretHash = {};
+		local LaneClearMinionsUnderTurret = {};
 		for _, orbwalkerMinion in pairs(OrbwalkerMinionsHash) do
 			if IsUnderTurret[orbwalkerMinion.Minion.networkID] then
 				if orbwalkerMinion:IsUnkillable() then
 					Linq:Add(UnkillableMinions, orbwalkerMinion);
 				elseif orbwalkerMinion:IsLastHittable() then
 					Linq:Add(LastHitMinions, orbwalkerMinion);
-				elseif orbwalkerMinion:IsAlmostLastHittable(true) then
-					if orbwalkerMinion:IsUnkillable(true) then
-						Linq:Add(UnkillableMinions, orbwalkerMinion);
-					else
-						Linq:Add(AlmostLastHitMinionsUnderTurret, orbwalkerMinion);
-					end
 				else
-					LaneClearMinionsUnderTurretHash[orbwalkerMinion.Minion.networkID] = true;
+					NotLastHittableMinionsUnderTurret[orbwalkerMinion.Minion.networkID] = true;
 				end
 			else
 				if orbwalkerMinion:IsUnkillable() then
@@ -3615,6 +3619,170 @@ class "__Orbwalker"
 				end
 			end
 		end
+
+		local CurrentTime = LocalGameTimer();
+
+		if nearestTurret ~= nil then
+			local AllyMinions = ObjectManager:GetAllyMinions(1500);
+			local AllyMinionsTarget = {};
+
+			for i = 1, #AllyMinions do
+				local AllyMinion = AllyMinions[i];
+				local AllyTarget = Utilities:GetAttackDataTarget(AllyMinion);
+				if AllyTarget ~= nil and AllyTarget > 0 then
+					AllyMinionsTarget[AllyTarget] = true;
+					local EnemyMinion = UnderTurretMinionsHash[AllyTarget];
+					if EnemyMinion ~= nil then
+						local AllyDamage = Damage:GetAutoAttackDamage(AllyMinion, EnemyMinion);
+						local AllyWindUpTime = Utilities:GetAttackDataWindUpTime(AllyMinion);
+						local AllyAnimationTime = Utilities:GetAttackDataAnimationTime(AllyMinion);
+						local AllyEndTime = Utilities:GetAttackDataEndTime(AllyMinion);
+						local AllyStartTime = 0;
+						if AllyEndTime > CurrentTime then
+							AllyStartTime = AllyEndTime - AllyAnimationTime;
+						else
+							AllyStartTime = AllyEndTime;
+						end
+						local EnemyMinionHealth = EnemyMinion.health;
+						local AllyMissileTravelTime = Utilities:IsMelee(AllyMinion) and 0 or (Utilities:GetDistance(AllyMinion, EnemyMinion) / Utilities:GetAttackDataProjectileSpeed(AllyMinion));
+						local AllyNextAutoAttackArrival = AllyStartTime + AllyWindUpTime + AllyMissileTravelTime;
+						while EnemyMinionHealth > 0 do
+							EnemyMinionHealth = EnemyMinionHealth - AllyDamage;
+							Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = AllyMinion.networkID, ArrivalTime = AllyNextAutoAttackArrival, Damage = AllyDamage });
+							AllyNextAutoAttackArrival = AllyNextAutoAttackArrival + AllyAnimationTime;
+						end
+					end
+				end
+			end
+			
+			local MinionsPriority = {};
+			local turretTarget = Utilities:GetAttackDataTarget(nearestTurret);
+			for i = 1, #UnderTurretMinions do
+				local EnemyMinion = UnderTurretMinions[i];
+				local Priority = 2;
+				if EnemyMinion.handle == turretTarget then
+					Priority = 3;
+				elseif AllyMinionsTarget[EnemyMinion.handle] ~= nil or HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID] ~= nil then
+					Priority = 1;
+				end
+				MinionsPriority[EnemyMinion.networkID] = Priority;
+			end
+
+			LocalTableSort(UnderTurretMinions, function(a, b)
+				if MinionsPriority[a.networkID] == MinionsPriority[b.networkID] then
+					if a.maxHealth == b.maxHealth then
+						return CachedDistanceSquared[a.networkID] < CachedDistanceSquared[b.networkID];
+					else
+						return a.maxHealth > b.maxHealth;
+					end
+				else
+					return MinionsPriority[a.networkID] > MinionsPriority[b.networkID];
+				end
+			end);
+
+			local turretProjectileSpeed = Utilities:GetAttackDataProjectileSpeed(nearestTurret); 
+			local turretWindUpTime = Utilities:GetAttackDataWindUpTime(nearestTurret);
+			local turretAnimationTime = Utilities:GetAttackDataAnimationTime(nearestTurret);
+			local turretEndTime = Utilities:GetAttackDataEndTime(nearestTurret);
+			local turretStartTime = 0;
+			if turretEndTime > CurrentTime then
+				turretStartTime = turretEndTime - turretAnimationTime;
+			else
+				turretStartTime = CurrentTime;--turretEndTime + 0.1;
+			end
+			local turretDamage = 0;
+			local turretNextAutoAttackArrival = turretStartTime;
+			local turretMinionHealth = -1;
+			local index = 1;
+			local turretMissileTravelTime = -1;
+			while index <= #UnderTurretMinions do
+				local EnemyMinion = UnderTurretMinions[index];
+				if turretMinionHealth <= 0 then
+					turretMinionHealth = EnemyMinion.health;
+					turretDamage = Damage:GetAutoAttackDamage(nearestTurret, EnemyMinion);
+					turretMissileTravelTime = Utilities:GetDistance(nearestTurret, EnemyMinion) / turretProjectileSpeed;
+				end
+
+				turretMinionHealth = turretMinionHealth - turretDamage;
+				Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = nearestTurret.networkID, ArrivalTime = turretNextAutoAttackArrival + turretWindUpTime + turretMissileTravelTime, Damage = turretDamage });
+				if turretMinionHealth <= 0 then
+					index = index + 1;
+				end
+				turretNextAutoAttackArrival = turretNextAutoAttackArrival + turretAnimationTime;
+			end
+
+			for i = 1, #UnderTurretMinions do
+				local EnemyMinion = UnderTurretMinions[i];
+				local EnemyMinionHealth = EnemyMinion.health;
+				local IsLastHittable = false;
+				if NotLastHittableMinionsUnderTurret[EnemyMinion.networkID] then
+					local AutoAttacks = AutoAttackArrivals[EnemyMinion.networkID];
+					LocalTableSort(AutoAttacks, function(a, b)
+						return a.ArrivalTime < b.ArrivalTime;
+					end);
+					local TurretAttackCount = 0;
+					local MyHeroAttackCount = 0;
+					local MinionsAttackCount = 0;
+					for j = 1, #AutoAttacks do
+						local AutoAttack = AutoAttacks[j];
+						if AutoAttack.networkID == myHero.networkID then
+							MyHeroAttackCount = MyHeroAttackCount + 1;
+						elseif AutoAttack.networkID == nearestTurret.networkID then
+							TurretAttackCount = TurretAttackCount + 1;
+						else
+							MinionsAttackCount = MinionsAttackCount + 1;
+						end
+						EnemyMinionHealth = EnemyMinionHealth - AutoAttack.Damage;
+						if EnemyMinionHealth <= self:GetAutoAttackDamage(EnemyMinion) and EnemyMinionHealth > 0 then
+							IsLastHittable = true;
+						end
+						if EnemyMinionHealth <= 0 then
+							local myHeroSecondAutoAttackArrival = CurrentTime + self:GetAttackOrderDelay() + windUpTime + maxMissileTravelTime + animationTime;
+							if myHeroSecondAutoAttackArrival >= AutoAttack.ArrivalTime then
+								if IsLastHittable then
+									Linq:Add(AlmostLastHitMinionsUnderTurret, OrbwalkerMinionsHash[EnemyMinion.handle]);
+								end
+							else
+								if not IsLastHittable then
+									if self.UnderTurretMinion == nil then
+										local ShouldBeHitted = false;
+										local EnemyMinionHealth = EnemyMinion.health - self:GetAutoAttackDamage(EnemyMinion);
+										for k = 1, #AutoAttacks do
+											local AutoAttack = AutoAttacks[k];
+											EnemyMinionHealth = EnemyMinionHealth - AutoAttack.Damage;
+											if EnemyMinionHealth <= self:GetAutoAttackDamage(EnemyMinion) and EnemyMinionHealth > 0 then
+												ShouldBeHitted = true;
+											end
+											if EnemyMinionHealth <= 0 then
+												if ShouldBeHitted then
+													self.UnderTurretMinion = EnemyMinion;
+												end
+												break;
+											end
+										end
+										if self.UnderTurretMinion == nil then
+											local EnemyMinionHealth = EnemyMinion.health;
+											local LastArrival = CurrentTime + self:GetAttackOrderDelay() + windUpTime + maxMissileTravelTime;
+											while EnemyMinionHealth > 0 do
+												EnemyMinionHealth = EnemyMinionHealth - self:GetAutoAttackDamage(EnemyMinion);
+												if EnemyMinionHealth > 0 then
+													LastArrival = LastArrival + animationTime;
+												end
+											end
+											if LastArrival <= AutoAttack.ArrivalTime then
+												Linq:Add(LaneClearMinionsUnderTurret, OrbwalkerMinionsHash[EnemyMinion.handle]);
+											end
+										end
+									end
+								end
+							end
+							break;
+						end
+					end
+				end
+			end
+		end
+
 
 		LocalTableSort(UnkillableMinions, function(a, b)
 			return a.LastHitHealth < b.LastHitHealth;
@@ -3653,163 +3821,8 @@ class "__Orbwalker"
 			break;
 		end
 
-		local CurrentTime = LocalGameTimer();
-
 		if self.AlmostLastHitMinion ~= nil then
 			self.LastShouldWait = CurrentTime;
-		end
-
-		local LaneClearMinionsUnderTurret = {};
-		if nearestTurret ~= nil then
-			local AutoAttackArrivals = {};
-			local UnderTurretMinionsHash = {};
-			for i = 1, #UnderTurretMinions do
-				local EnemyMinion = UnderTurretMinions[i];
-				AutoAttackArrivals[EnemyMinion.networkID] = {};
-				UnderTurretMinionsHash[EnemyMinion.handle] = EnemyMinion;
-			end
-
-			local AllyMinions = ObjectManager:GetAllyMinions(1500);
-			local AllyMinionsTarget = {};
-
-			for i = 1, #AllyMinions do
-				local AllyMinion = AllyMinions[i];
-				local AllyTarget = Utilities:GetAttackDataTarget(AllyMinion);
-				if AllyTarget ~= nil and AllyTarget > 0 then
-					AllyMinionsTarget[AllyTarget] = true;
-					local EnemyMinion = UnderTurretMinionsHash[AllyTarget];
-					if EnemyMinion ~= nil then
-						local AllyDamage = Damage:GetAutoAttackDamage(AllyMinion, EnemyMinion);
-						local AllyWindUpTime = Utilities:GetAttackDataWindUpTime(AllyMinion);
-						local AllyAnimationTime = Utilities:GetAttackDataAnimationTime(AllyMinion);
-						local AllyEndTime = Utilities:GetAttackDataEndTime(AllyMinion);
-						local AllyStartTime = 0;
-						if AllyEndTime > CurrentTime then
-							AllyStartTime = AllyEndTime - AllyAnimationTime;
-						else
-							AllyStartTime = AllyEndTime;
-						end
-						local EnemyMinionHealth = EnemyMinion.health;
-						local AllyMissileTravelTime = Utilities:IsMelee(AllyMinion) and 0 or (Utilities:GetDistance(AllyMinion, EnemyMinion) / Utilities:GetAttackDataProjectileSpeed(AllyMinion));
-						local AllyNextAutoAttackArrival = AllyStartTime + AllyWindUpTime + AllyMissileTravelTime;
-						while EnemyMinionHealth > 0 do
-							EnemyMinionHealth = EnemyMinionHealth - AllyDamage;
-							Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = AllyMinion.networkID, ArrivalTime = AllyNextAutoAttackArrival, Damage = AllyDamage });
-							AllyNextAutoAttackArrival = AllyNextAutoAttackArrival + AllyAnimationTime;
-						end
-					end
-				end
-			end
-
-			local MinionsPriority = {};
-			local turretTarget = Utilities:GetAttackDataTarget(nearestTurret);
-			for i = 1, #UnderTurretMinions do
-				local EnemyMinion = UnderTurretMinions[i];
-				local Priority = 2;
-				if EnemyMinion.handle == turretTarget then
-					Priority = 3;
-				elseif AllyMinionsTarget[EnemyMinion.handle] ~= nil or HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID] ~= nil then
-					Priority = 1;
-				end
-				MinionsPriority[EnemyMinion.networkID] = Priority;
-			end
-
-			LocalTableSort(UnderTurretMinions, function(a, b)
-				if MinionsPriority[a.networkID] == MinionsPriority[b.networkID] then
-					if a.maxHealth == b.maxHealth then
-						return CachedDistanceSquared[a.networkID] < CachedDistanceSquared[b.networkID];
-					else
-						return a.maxHealth > b.maxHealth;
-					end
-				else
-					return MinionsPriority[a.networkID] > MinionsPriority[b.networkID];
-				end
-			end);
-
-			for i = 1, #UnderTurretMinions do
-				local EnemyMinion = UnderTurretMinions[i];
-				local EnemyMinionHealth = EnemyMinion.health;
-				local myHeroDamage = self:GetAutoAttackDamage(EnemyMinion);
-				local myHeroMissileTravelTime = Utilities:IsMelee(myHero) and 0 or (Utilities:GetDistance(myHero, EnemyMinion) / MissileSpeed);
-				local myHeroNextAutoAttackArrival = CurrentTime + self:GetAttackOrderDelay() + windUpTime + myHeroMissileTravelTime;
-				while EnemyMinionHealth > 0 do
-					EnemyMinionHealth = EnemyMinionHealth - myHeroDamage;
-					Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = myHero.networkID, ArrivalTime = myHeroNextAutoAttackArrival, Damage = myHeroDamage });
-					myHeroNextAutoAttackArrival = myHeroNextAutoAttackArrival + animationTime;
-				end
-			end
-
-			local turretProjectileSpeed = Utilities:GetAttackDataProjectileSpeed(nearestTurret); 
-			local turretWindUpTime = Utilities:GetAttackDataWindUpTime(nearestTurret);
-			local turretAnimationTime = Utilities:GetAttackDataAnimationTime(nearestTurret);
-			local turretEndTime = Utilities:GetAttackDataEndTime(nearestTurret);
-			local turretStartTime = 0;
-			if turretEndTime > CurrentTime then
-				turretStartTime = turretEndTime - turretAnimationTime;
-			else
-				turretStartTime = turretEndTime + 0.1;
-			end
-			local turretDamage = 0;
-			local turretNextAutoAttackArrival = turretStartTime;
-			local turretMinionHealth = -1;
-			local index = 1;
-			local turretMissileTravelTime = -1;
-			while index <= #UnderTurretMinions do
-				local EnemyMinion = UnderTurretMinions[index];
-				if turretMinionHealth <= 0 then
-					turretMinionHealth = EnemyMinion.health;
-					turretDamage = Damage:GetAutoAttackDamage(nearestTurret, EnemyMinion);
-					turretMissileTravelTime = Utilities:GetDistance(nearestTurret, EnemyMinion) / turretProjectileSpeed;
-				end
-
-				local turretAttackTravelTime = turretWindUpTime + turretMissileTravelTime;
-				turretNextAutoAttackArrival = turretNextAutoAttackArrival + turretAttackTravelTime;
-				Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = nearestTurret.networkID, ArrivalTime = turretNextAutoAttackArrival, Damage = turretDamage });
-				turretMinionHealth = turretMinionHealth - turretDamage;
-				if turretMinionHealth <= 0 then
-					index = index + 1;
-				end
-				turretNextAutoAttackArrival = turretNextAutoAttackArrival - turretAttackTravelTime + turretAnimationTime;
-			end
-
-			local MinionsUnderTurretAttack = {};
-
-			for i = 1, #UnderTurretMinions do
-				local EnemyMinion = UnderTurretMinions[i];
-				local EnemyMinionHealth = EnemyMinion.health;
-				if LaneClearMinionsUnderTurretHash[EnemyMinion.networkID] then
-					local AutoAttacks = AutoAttackArrivals[EnemyMinion.networkID];
-					LocalTableSort(AutoAttacks, function(a, b)
-						return a.ArrivalTime < b.ArrivalTime;
-					end);
-					local TurretAttackCount = 0;
-					local MyHeroAttackCount = 0;
-					for j = 1, #AutoAttacks do
-						local AutoAttack = AutoAttacks[j];
-						if AutoAttack.networkID == myHero.networkID then
-							MyHeroAttackCount = MyHeroAttackCount + 1;
-						elseif AutoAttack.networkID == nearestTurret.networkID then
-							TurretAttackCount = TurretAttackCount + 1;
-						end
-						EnemyMinionHealth = EnemyMinionHealth - AutoAttack.Damage;
-						if EnemyMinionHealth <= 0 then
-							if TurretAttackCount > 0 then
-								if AutoAttack.networkID == myHero.networkID and MyHeroAttackCount > 1 then
-									if self.UnderTurretMinion == nil then
-										self.UnderTurretMinion = EnemyMinion;
-									end
-								end
-							else
-								local orbwalkerMinion = OrbwalkerMinionsHash[EnemyMinion.handle];
-								if orbwalkerMinion:IsLaneClearable() then
-									Linq:Add(LaneClearMinionsUnderTurret, orbwalkerMinion);
-								end
-							end
-							break;
-						end
-					end
-				end
-			end
 		end
 
 		local PushPriority = self.Menu.Farming.PushPriority:Value();
