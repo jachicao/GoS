@@ -81,6 +81,8 @@ _G.SDK = {
 	HealthPrediction 				= nil,
 	Orbwalker 						= nil,
 };
+
+local myHero						= _G.myHero;
 local LocalVector					= Vector;
 local LocalOsClock					= os.clock;
 local LocalCallbackAdd				= Callback.Add;
@@ -107,6 +109,8 @@ local LocalGameWardCount 			= Game.WardCount;
 local LocalGameWard 				= Game.Ward;
 local LocalGameObjectCount 			= Game.ObjectCount;
 local LocalGameObject				= Game.Object;
+local LocalGameMissileCount 		= Game.MissileCount;
+local LocalGameMissile				= Game.Missile;
 local LocalGameIsChatOpen			= Game.IsChatOpen;
 local LocalGameIsOnTop				= Game.IsOnTop;
 local STATE_UNKNOWN					= STATE_UNKNOWN;
@@ -199,8 +203,6 @@ local ObjectManager = nil;
 local TargetSelector = nil;
 local HealthPrediction = nil;
 local Orbwalker = nil;
-
-local myHero = _G.myHero;
 local EnemiesInGame = {};
 
 local LoadCallbacks = {};
@@ -296,10 +298,10 @@ end
 
 local ControlMoveTable = {};
 local CONTROL_MOVE_STEP_SET_TARGET_POSITION			= 1;
-local CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION		= 2;
-local CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION	= 3;
+local CONTROL_MOVE_STEP_PRESS_POSITION				= 2;
+local CONTROL_MOVE_STEP_RELEASE_POSITION			= 3;
 local CONTROL_MOVE_STEP_SET_MOUSE_POSITION			= 4;
-local CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION		= 5;
+local CONTROL_MOVE_STEP_FINISH						= 5;
 
 ControlMoveTable = {
 	[CONTROL_MOVE_STEP_SET_TARGET_POSITION] = function()
@@ -308,19 +310,14 @@ ControlMoveTable = {
 		else
 			LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
 		end
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION;
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_POSITION;
 	end,
-	[CONTROL_MOVE_STEP_RE_SET_TARGET_POSITION] = function()
-		if ControlOrder.TargetPosition.z ~= nil then
-			LocalControlSetCursorPos(ControlOrder.TargetPosition);
-		else
-			LocalControlSetCursorPos(ControlOrder.TargetPosition.x, ControlOrder.TargetPosition.y);
-		end
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION;
-	end,
-	[CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION] = function()
+	[CONTROL_MOVE_STEP_PRESS_POSITION] = function()
 		LocalControlKeyDown(_G.HK_TCO);
 		LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_RELEASE_POSITION;
+	end,
+	[CONTROL_MOVE_STEP_RELEASE_POSITION] = function()
 		LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
 		LocalControlKeyUp(_G.HK_TCO);
 		if ControlOrder.TargetPosition ~= nil then
@@ -332,12 +329,15 @@ ControlMoveTable = {
 	[CONTROL_MOVE_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep = CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION;
+		ControlOrder.NextStep = CONTROL_MOVE_STEP_FINISH;
 	end,
-	[CONTROL_MOVE_STEP_RE_SET_MOUSE_POSITION] = function()
-		local position = ControlOrder.MousePosition;
-		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder = nil;
+	[CONTROL_MOVE_STEP_FINISH] = function()
+		if Utilities:GetDistance2DSquared(ControlOrder.MousePosition, _G.cursorPos) <= MAXIMUM_MOUSE_DISTANCE_SQUARED then
+			ControlOrder = nil;
+		else
+			--print("error");
+			ControlOrder.NextStep = CONTROL_MOVE_STEP_SET_MOUSE_POSITION;
+		end
 	end,
 };
 
@@ -367,7 +367,7 @@ _G.Control.Move = function(a, b, c)
 		else
 			ControlOrder = {
 				Type = CONTROL_TYPE_MOVE,
-				NextStep = CONTROL_MOVE_STEP_PRESS_AND_RELEASE_POSITION,
+				NextStep = CONTROL_MOVE_STEP_PRESS_POSITION,
 				MousePosition = _G.cursorPos,
 			};
 		end
@@ -1165,6 +1165,10 @@ class "__Utilities"
 			["GoldCardPreAttack"] = true,
 		};
 
+		self.NoAutoAttacks = {
+			["GravesAutoAttackRecoil"] = true,
+		}
+
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
 			self.SpecialMelees[charName] = function(target) return true end;
@@ -1479,7 +1483,7 @@ class "__Utilities"
 	end
 
 	function __Utilities:IsAutoAttack(name)
-		return (name:lower():find("attack")) or self.SpecialAutoAttacks[name] ~= nil;
+		return (self.NoAutoAttacks[name] == nil and name:lower():find("attack")) or self.SpecialAutoAttacks[name] ~= nil;
 	end
 
 	function __Utilities:IsAutoAttacking(unit)
