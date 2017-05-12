@@ -3363,7 +3363,8 @@ class "__Orbwalker"
 
 	function __Orbwalker:GetTarget()
 		if Utilities:IsValidTarget(self.ForceTarget) then
-			return Utilities:IsInAutoAttackRange(myHero, self.ForceTarget) and self.ForceTarget or nil;
+			--return Utilities:IsInAutoAttackRange(myHero, self.ForceTarget) and self.ForceTarget or nil;
+			return self.ForceTarget;
 		end
 		if self.IsNone then
 			return nil;
