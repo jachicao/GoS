@@ -1163,6 +1163,9 @@ class "__Utilities"
 			["BlueCardPreAttack"] = true,
 			["RedCardPreAttack"] = true,
 			["GoldCardPreAttack"] = true,
+			["MordekaiserQAttack"] = true,
+			["MordekaiserQAttack1"] = true,
+			["MordekaiserQAttack2"] = true,
 		};
 
 		self.NoAutoAttacks = {
@@ -1227,6 +1230,7 @@ class "__Utilities"
 			["Thresh"] = true,
 		};
 		self.DisableSpellAnimationTime = {
+			["Mordekaiser"] = true,
 			["TwistedFate"] = true,
 		};
 		self.Slots = {
@@ -2594,6 +2598,11 @@ class "__Orbwalker"
 		self.SpecialAutoAttacks = {
 			["Caitlyn"] = { 
 				["CaitlynHeadshotMissile"] = true 
+			},
+			["Mordekaiser"] = { 
+				["MordekaiserQAttack"] = true,
+				["MordekaiserQAttack1"] = true,
+				["MordekaiserQAttack2"] = true,
 			},
 			["TwistedFate"] = {
 				["BlueCardPreAttack"] = true,
