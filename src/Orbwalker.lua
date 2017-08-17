@@ -1166,6 +1166,9 @@ class "__Utilities"
 			["MordekaiserQAttack"] = true,
 			["MordekaiserQAttack1"] = true,
 			["MordekaiserQAttack2"] = true,
+			["XenZhaoThrust"] = true,
+			["XenZhaoThrust2"] = true,
+			["XenZhaoThrust3"] = true,
 		};
 
 		self.NoAutoAttacks = {
@@ -1232,6 +1235,7 @@ class "__Utilities"
 		self.DisableSpellAnimationTime = {
 			["Mordekaiser"] = true,
 			["TwistedFate"] = true,
+			["XinZhao"] = true,
 		};
 		self.Slots = {
 			_Q,
@@ -2608,6 +2612,11 @@ class "__Orbwalker"
 				["BlueCardPreAttack"] = true,
 				["RedCardPreAttack"] = true,
 				["GoldCardPreAttack"] = true,
+			},
+			["XinZhao"] = { 
+				["XenZhaoThrust"] = true,
+				["XenZhaoThrust2"] = true,
+				["XenZhaoThrust3"] = true,
 			},
 		}
 
