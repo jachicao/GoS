@@ -1163,6 +1163,12 @@ class "__Utilities"
 			["BlueCardPreAttack"] = true,
 			["RedCardPreAttack"] = true,
 			["GoldCardPreAttack"] = true,
+			["MordekaiserQAttack"] = true,
+			["MordekaiserQAttack1"] = true,
+			["MordekaiserQAttack2"] = true,
+			["XenZhaoThrust"] = true,
+			["XenZhaoThrust2"] = true,
+			["XenZhaoThrust3"] = true,
 		};
 
 		self.NoAutoAttacks = {
@@ -1227,7 +1233,9 @@ class "__Utilities"
 			["Thresh"] = true,
 		};
 		self.DisableSpellAnimationTime = {
+			["Mordekaiser"] = true,
 			["TwistedFate"] = true,
+			["XinZhao"] = true,
 		};
 		self.Slots = {
 			_Q,
@@ -2595,10 +2603,20 @@ class "__Orbwalker"
 			["Caitlyn"] = { 
 				["CaitlynHeadshotMissile"] = true 
 			},
+			["Mordekaiser"] = { 
+				["MordekaiserQAttack"] = true,
+				["MordekaiserQAttack1"] = true,
+				["MordekaiserQAttack2"] = true,
+			},
 			["TwistedFate"] = {
 				["BlueCardPreAttack"] = true,
 				["RedCardPreAttack"] = true,
 				["GoldCardPreAttack"] = true,
+			},
+			["XinZhao"] = { 
+				["XenZhaoThrust"] = true,
+				["XenZhaoThrust2"] = true,
+				["XenZhaoThrust3"] = true,
 			},
 		}
 
