@@ -1273,7 +1273,7 @@ class "__Utilities"
 		for i = 0, myHero.buffCount do
 			local buff = myHero:GetBuff(i);
 			if buff.count > 0 and buff.duration>=0.1 then
-				if (buff.type == 5 or buff.type == 8 or buff.type == 21 or buff.type == 22 or buff.type == 11 or buff.type == 24) then
+				if (buff.type == 5 or buff.type == 8 or buff.type == 21 or buff.type == 22 or buff.type == 24) then
 					return 0 -- block everything
 				end
 				if (buff.type == 25) then -- cant attack
