@@ -1270,6 +1270,25 @@ class "__Utilities"
 	end
 
 
+	function __Utilities:CanControl()
+	local canattack,canmove = true,true
+		for i = 0, myHero.buffCount do
+			local buff = myHero:GetBuff(i);
+			if buff.count > 0 and buff.duration>=0.1 then
+				if (buff.type == 5 or buff.type == 8 or buff.type == 21 or buff.type == 22 or buff.type == 24) then
+					return false,false -- block everything
+				end
+				if (buff.type == 25) then -- cant attack
+					canattack = false
+				end
+				if (buff.type == 11) then -- cant move 
+					canmove = false
+				end
+
+			end
+		end
+		return canattack,canmove
+	end
 	function __Utilities:__GetAutoAttackRange(from)
 		local range = from.range;
 		if from.type == Obj_AI_Minion then
@@ -3009,6 +3028,10 @@ class "__Orbwalker"
 		end
 
 		if self.Attack and self:CanAttack() then
+			local canattack,canmove = Utilities:CanControl()
+			if (not canattack) then
+				return 
+			end 
 			local target = self:GetTarget();
 			if target ~= nil then
 				local args = {
@@ -3037,6 +3060,10 @@ class "__Orbwalker"
 		if (not self.Movement) or (not self:CanMove()) then
 			return;
 		end
+		local canattack,canmove = Utilities:CanControl()
+		if (not canmove) then
+			return 
+		end 
 		local CurrentTime = LocalGameTimer();
 		if CurrentTime - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
 			if self.Menu.General.FastKiting:Value() then
