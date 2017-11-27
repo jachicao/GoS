@@ -2744,7 +2744,7 @@ class "__Orbwalker"
 			["Rengar"] = { Slot = _Q, toggle = true  },
 			["Riven"] = { Slot = _Q },
 			["Sejuani"] = { Slot = _W },
-			["Sivir"] = { Slot = _W, toggle = true  },
+			["Sivir"] = { Slot = _W },
 			["Trundle"] = { Slot = _Q, toggle = true  },
 			["Vayne"] = { Slot = _Q, toggle = true  },
 			["Vi"] = { Slot = _E, toggle = true  },
