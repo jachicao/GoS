@@ -1159,6 +1159,7 @@ class "__Utilities"
 		};
 
 		self.SpecialAutoAttacks = {
+			["GarenQAttack"] = true,
 			["CaitlynHeadshotMissile"] = true,
 			["BlueCardPreAttack"] = true,
 			["RedCardPreAttack"] = true,
@@ -2602,6 +2603,9 @@ class "__Orbwalker"
 		self.SpecialAutoAttacks = {
 			["Caitlyn"] = { 
 				["CaitlynHeadshotMissile"] = true 
+			},
+			["Garen"] = { 
+				["GarenQAttack"] = true 
 			},
 			["Mordekaiser"] = { 
 				["MordekaiserQAttack"] = true,
