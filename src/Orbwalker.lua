@@ -2724,6 +2724,7 @@ class "__Orbwalker"
 		self.AutoAttackResets = {
 			["Blitzcrank"] = { Slot = _E, toggle = true },
 			["Camille"] = { Slot = _Q },
+			["Chogath"] = { Slot = _E, toggle = true },
 			["Darius"] = { Slot = _W, toggle = true },
 			["DrMundo"] = { Slot = _E },
 			["Elise"] = { Slot = _W, Name = "EliseSpiderW"},
