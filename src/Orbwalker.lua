@@ -2885,6 +2885,7 @@ class "__Orbwalker"
 			self:OnDraw();
 		end);
 
+		self.WindDownTimer = 0;
 		self.Loaded = true;
 	end
 
@@ -2947,7 +2948,11 @@ class "__Orbwalker"
 		local IsAutoAttacking = self:IsAutoAttacking(myHero);
 		if not IsAutoAttacking then
 			if self.MyHeroIsAutoAttacking then
-				self:__OnPostAttack();
+				if self.WindDownTimer > LocalGameTimer() then 
+					self:__OnAutoAttackReset();
+				else
+					self:__OnPostAttack();
+				end
 			end
 		end
 		self.MyHeroIsAutoAttacking = IsAutoAttacking;
@@ -3290,7 +3295,11 @@ class "__Orbwalker"
 	function __Orbwalker:IsAutoAttacking(unit)
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		local endTime = self:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
-		return LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0;
+		local isattacking = LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0 and Utilities:IsAutoAttacking(unit)
+		if isattacking and (not self.WindDownTimer or self.WindDownTimer < LocalGameTimer()) then
+			self.WindDownTimer = endTime
+		end
+		return isattacking;
 	end
 
 	function __Orbwalker:GetMaximumIssueOrderDelay()
