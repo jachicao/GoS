@@ -230,6 +230,8 @@ LocalCallbackAdd('Load', function()
 	end);
 end);
 
+local AttackTargetKeybind = nil;
+local UseAttackTargetBind = false;
 local ControlOrder = nil;
 local CONTROL_TYPE_ATTACK			= 1;
 local CONTROL_TYPE_MOVE				= 2;
@@ -245,21 +247,31 @@ local CONTROL_ATTACK_STEP_RELEASE_TARGET			= 3;
 local CONTROL_ATTACK_STEP_SET_MOUSE_POSITION		= 4;
 local CONTROL_ATTACK_STEP_FINISH					= 5;
 
+
 ControlAttackTable = {
 	[CONTROL_ATTACK_STEP_SET_TARGET_POSITION] = function()
 		local CurrentTime = LocalGameTimer();
-		LocalControlSetCursorPos(ControlOrder.Target.pos);
+		local newpos = Vector(ControlOrder.Target.pos.x, ControlOrder.Target.pos.y,ControlOrder.Target.pos.z + 50)
+		LocalControlSetCursorPos(newpos);
 		ControlOrder.NextStep = CONTROL_ATTACK_STEP_PRESS_TARGET;
 	end,
 	[CONTROL_ATTACK_STEP_PRESS_TARGET] = function()
 		if ControlOrder.TargetIsHero then
 			LocalControlKeyDown(_G.HK_TCO);
 		end
-		LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		if not UseAttackTargetBind then 
+			LocalControlMouseEvent(MOUSEEVENTF_RIGHTDOWN);
+		else
+			LocalControlKeyDown(AttackTargetKeybind);
+		end
 		ControlOrder.NextStep = CONTROL_ATTACK_STEP_RELEASE_TARGET;
 	end,
 	[CONTROL_ATTACK_STEP_RELEASE_TARGET] = function()
-		LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
+		if not UseAttackTargetBind then 
+			LocalControlMouseEvent(MOUSEEVENTF_RIGHTUP);
+		else
+			LocalControlKeyUp(AttackTargetKeybind);
+		end
 		if ControlOrder.TargetIsHero then
 			LocalControlKeyUp(_G.HK_TCO);
 		end
@@ -396,7 +408,7 @@ ControlCastSpellTable = {
 			LocalControlMouseEvent(MOUSEEVENTF_LEFTDOWN);
 		end
 		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_RELEASE_KEY;
-
+		
 	end,
 	[CONTROL_CASTSPELL_STEP_RELEASE_KEY] = function()
 		if ControlOrder.TargetPosition ~= nil then
@@ -412,7 +424,7 @@ ControlCastSpellTable = {
 	[CONTROL_CASTSPELL_STEP_SET_MOUSE_POSITION] = function()
 		local position = ControlOrder.MousePosition;
 		LocalControlSetCursorPos(position.x, position.y);
-		ControlOrder.NextStep =  CONTROL_CASTSPELL_STEP_FINISH;
+		ControlOrder.NextStep = CONTROL_CASTSPELL_STEP_FINISH;
 	end,
 	[CONTROL_CASTSPELL_STEP_FINISH] = function()
 		if Utilities:GetDistance2DSquared(ControlOrder.MousePosition, _G.cursorPos) <= MAXIMUM_MOUSE_DISTANCE_SQUARED then
@@ -625,7 +637,7 @@ class "__Damage"
 					local level = Utilities:GetSpellLevel(args.From, _Q);
 					args.RawPhysical = args.RawPhysical + 25 + 5 * level + (0.55 + 0.1 * level) * args.From.bonusDamage; 
 				end
-
+				
 			end,
 			["Graves"] = function(args)
 				local t = { 70, 71, 72, 74, 75, 76, 78, 80, 81, 83, 85, 87, 89, 91, 95, 96, 97, 100 };
@@ -638,6 +650,16 @@ class "__Damage"
 			end,
 			["Kalista"] = function(args)
 				args.RawPhysical = args.RawPhysical - args.From.totalDamage * 0.1;
+			end,
+			["Kayle"] = function(args)
+				local level = Utilities:GetSpellLevel(args.From, _E);
+				if level > 0 then
+					if BuffManager:HasBuff(args.From, "JudicatorRighteousFury") then
+						args.RawMagical = args.RawMagical + 10+ 10* level + 0.3 * args.From.ap;
+					else
+						args.RawMagical = args.RawMagical + 5+ 5* level + 0.15 * args.From.ap;
+					end
+				end
 			end,
 			["Nasus"] = function(args)
 				if BuffManager:HasBuff(args.From, "NasusQ") then
@@ -798,7 +820,7 @@ class "__Damage"
 			local charName = ObjectManager.MinionTypesDictionary["Super"][i];
 			self.TurretToMinionPercentMod[charName] = 0.05;
 		end
-
+		
 	end
 
 	function __Damage:GetMaxLevel(hero)
@@ -815,24 +837,24 @@ class "__Damage"
 		if isAutoAttackOrTargetted == nil then
 			isAutoAttackOrTargetted = false;
 		end
-
+		
 		local fromIsMinion = from.type == Obj_AI_Minion;
 		local targetIsMinion = target.type == Obj_AI_Minion;
-
+		
 		local baseResistance = 0;
 		local bonusResistance = 0;
 		local penetrationFlat = 0;
 		local penetrationPercent = 0;
 		local bonusPenetrationPercent = 0;
-
+		
 		if damageType == DAMAGE_TYPE_PHYSICAL then
 			baseResistance = LocalMathMax(target.armor - target.bonusArmor, 0);
 			bonusResistance = target.bonusArmor;
 			penetrationFlat = from.armorPen;
 			penetrationPercent = from.armorPenPercent;
 			bonusPenetrationPercent = from.bonusArmorPenPercent;
-
-			--  Minions return wrong percent values.
+			
+			-- Minions return wrong percent values.
 			if fromIsMinion then
 				penetrationFlat = 0;
 				penetrationPercent = 0;
@@ -863,7 +885,7 @@ class "__Damage"
 			resistance = baseResistance + bonusResistance;
 			resistance = resistance - penetrationFlat;
 		end
-
+		
 		local percentMod = 1;
 		-- Penetration cant reduce resistance below 0.
 		if resistance >= 0 then
@@ -873,17 +895,17 @@ class "__Damage"
 		end
 		local percentReceived = 1;
 		local flatPassive = 0;
-
+		
 		local percentPassive = 1;
 		if fromIsMinion and targetIsMinion then
 			percentPassive = percentPassive * (1 + from.bonusDamagePercent);
 		end
-
+		
 		local flatReceived = 0;
 		if fromIsMinion and targetIsMinion then
 			flatReceived = flatReceived - target.flatDamageReduction;
 		end
-
+		
 		return LocalMathMax(percentReceived * percentPassive * percentMod * (rawDamage + flatPassive) + flatReceived, 0);
 	end
 
@@ -902,7 +924,7 @@ class "__Damage"
 		if self.StaticChampionDamageDatabase[args.From.charName] ~= nil then
 			self.StaticChampionDamageDatabase[args.From.charName](args);
 		end
-
+		
 		local HashSet = {};
 		for i = 1, #ItemManager.ItemSlots do
 			local slot = ItemManager.ItemSlots[i];
@@ -916,7 +938,7 @@ class "__Damage"
 				end
 			end
 		end
-
+		
 		return args;
 	end
 
@@ -937,11 +959,11 @@ class "__Damage"
 		if args.TargetIsMinion and Utilities:IsOtherMinion(args.Target) then
 			return 1;
 		end
-
+		
 		if self.VariableChampionDamageDatabase[args.From.charName] ~= nil then
 			self.VariableChampionDamageDatabase[args.From.charName](args);
 		end
-
+		
 		if args.DamageType == DAMAGE_TYPE_PHYSICAL then
 			args.RawPhysical = args.RawPhysical + args.RawTotal;
 		elseif args.DamageType == DAMAGE_TYPE_MAGICAL then
@@ -949,15 +971,15 @@ class "__Damage"
 		elseif args.DamageType == DAMAGE_TYPE_TRUE then
 			args.CalculatedTrue = args.CalculatedTrue + args.RawTotal;
 		end
-
+		
 		if args.RawPhysical > 0 then
 			args.CalculatedPhysical = args.CalculatedPhysical + self:CalculateDamage(from, target, DAMAGE_TYPE_PHYSICAL, args.RawPhysical, false, args.DamageType == DAMAGE_TYPE_PHYSICAL);
 		end
-
+		
 		if args.RawMagical > 0 then
 			args.CalculatedMagical = args.CalculatedMagical + self:CalculateDamage(from, target, DAMAGE_TYPE_MAGICAL, args.RawMagical, false, args.DamageType == DAMAGE_TYPE_MAGICAL);
 		end
-
+		
 		local percentMod = 1;
 		if LocalMathAbs(args.From.critChance - 1) < EPSILON or args.CriticalStrike then
 			percentMod = percentMod * self:GetCriticalStrikePercent(args.From);
@@ -1087,7 +1109,7 @@ class "__Utilities"
 				return nil;
 			end,
 		};
-
+		
 		self.SpecialMissileSpeeds = {
 			["Caitlyn"] = function(unit, target)
 				if BuffManager:HasBuff(unit, "caitlynheadshot") then
@@ -1135,14 +1157,14 @@ class "__Utilities"
 				return nil;
 			end,
 		};
-
+		
 		self.SpecialMelees = {
 			["Azir"] = function(unit) return true end,
 			["Thresh"] = function(unit) return true end,
 			["Velkoz"] = function(unit) return true end,
 			["Viktor"] = function(unit) return BuffManager:HasBuff(unit, "ViktorPowerTransferReturn") end,
 		};
-
+		
 		self.UndyingBuffs = {
 			["Aatrox"] = function(target, addHealthCheck)
 				return BuffManager:HasBuff(target, "aatroxpassivedeath");
@@ -1157,30 +1179,31 @@ class "__Utilities"
 				return BuffManager:HasBuff(target, "VladimirSanguinePool");
 			end,
 		};
-
+		
 		self.SpecialAutoAttacks = {
 			["GarenQAttack"] = true,
+			["KennenMegaProc"] = true,
 			["CaitlynHeadshotMissile"] = true,
-			["BlueCardPreAttack"] = true,
-			["RedCardPreAttack"] = true,
-			["GoldCardPreAttack"] = true,
 			["MordekaiserQAttack"] = true,
 			["MordekaiserQAttack1"] = true,
 			["MordekaiserQAttack2"] = true,
 			["XenZhaoThrust"] = true,
 			["XenZhaoThrust2"] = true,
 			["XenZhaoThrust3"] = true,
+			["BlueCardPreAttack"] = true,
+			["RedCardPreAttack"] = true,
+			["GoldCardPreAttack"] = true
 		};
-
+		
 		self.NoAutoAttacks = {
 			["GravesAutoAttackRecoil"] = true,
 		}
-
+		
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			local charName = ObjectManager.MinionTypesDictionary["Melee"][i];
 			self.SpecialMelees[charName] = function(target) return true end;
 		end
-
+		
 		self.MinionsRange = {};
 		for i = 1, #ObjectManager.MinionTypesDictionary["Melee"] do
 			self.MinionsRange[ObjectManager.MinionTypesDictionary["Melee"][i]] = 110;
@@ -1194,7 +1217,7 @@ class "__Utilities"
 		for i = 1, #ObjectManager.MinionTypesDictionary["Super"] do
 			self.MinionsRange[ObjectManager.MinionTypesDictionary["Super"][i]] = 170;
 		end
-
+		
 		self.BaseTurrets = {
 			["SRUAP_Turret_Order3"] = true,
 			["SRUAP_Turret_Order4"] = true,
@@ -1212,7 +1235,7 @@ class "__Utilities"
 			[Obj_HQ] = true,
 		};
 		self.CachedValidTargets = {};
-
+		
 		self.SlotToHotKeys = {
 			[_Q]			= function() return _G.HK_Q end,
 			[_W]			= function() return _G.HK_W end,
@@ -1228,15 +1251,15 @@ class "__Utilities"
 			[SUMMONER_1]	= function() return _G.HK_SUMMONER_1 end,
 			[SUMMONER_2]	= function() return _G.HK_SUMMONER_2 end,
 		};
-
+		
 		self.DisableSpellWindUpTime = {
 			["Kalista"] = true,
 			["Thresh"] = true,
 		};
 		self.DisableSpellAnimationTime = {
-			["Mordekaiser"] = true,
 			["TwistedFate"] = true,
 			["XinZhao"] = true,
+			["Mordekaiser"] = true
 		};
 		self.Slots = {
 			_Q,
@@ -1253,11 +1276,11 @@ class "__Utilities"
 			SUMMONER_1,
 			SUMMONER_2,
 		};
-
+		
 		LocalCallbackAdd('Tick', function()
 			self.CachedValidTargets = {};
 		end);
-
+		
 		self.MenuIsOpen = false;
 		--[[
 		LocalCallbackAdd('WndMsg', function(msg, wParam)
@@ -1270,7 +1293,33 @@ class "__Utilities"
 		]]
 	end
 
-
+	function __Utilities:CanControl()
+		local canattack,canmove = true,true
+		for i = 0, myHero.buffCount do
+			local buff = myHero:GetBuff(i);
+			if buff.count > 0 and buff.duration>=0.1 then
+				if (buff.type == 5 --stun
+				or buff.type == 8 --taunt
+				or buff.type == 21 --Fear
+				or buff.type == 22 --charm
+				or buff.type == 24 --supression
+				or buff.type == 29) --knockup
+				then
+					return false,false -- block everything
+				end
+				if (buff.type == 25 --blind
+				or buff.type == 9) --polymorph
+				then -- cant attack
+					canattack = false
+				end
+				if (buff.type == 11) then -- cant move 
+					canmove = false
+				end
+				
+			end
+		end
+		return canattack,canmove
+	end
 	function __Utilities:__GetAutoAttackRange(from)
 		local range = from.range;
 		if from.type == Obj_AI_Minion then
@@ -1355,7 +1404,7 @@ class "__Utilities"
 				local z = (a.z - b.z);
 				return x * x + y * y + z * z;
 			else
-
+				
 				local x = (a.x - b.x);
 				local z = (a.z - b.z);
 				return x * x + z * z;
@@ -1596,7 +1645,7 @@ class "__Utilities"
 
 class "__Linq"
 	function __Linq:__init()
-
+		
 	end
 
 	function __Linq:Add(t, value)
@@ -1886,7 +1935,7 @@ class "__HealthPrediction"
 		end);
 	end
 
-	function __HealthPrediction:OnTick()
+	function __HealthPrediction:OnTick()	
 		local newAlliesEndTime = {};
 		local newAlliesSearchingTargetDamage = {};
 		local enemyMinions = nil;
@@ -2183,7 +2232,7 @@ class "__TargetSelector"
 			["Graves"] = 4,
 			["Hecarim"] = 1,
 			["Heimerdinger"] = 3,
-			["Illaoi"] =  2,
+			["Illaoi"] = 2,
 			["Irelia"] = 2,
 			["Ivern"] = 2,
 			["Janna"] = 1,
@@ -2420,24 +2469,24 @@ class "__TargetSelector"
 			end
 			--[[
 			self.Menu.Priorities:MenuElement({ id = "Reset", name = "Reset priorities to default values", value = false, callback = function()
-				if self.Loaded then
-					if self.Menu.Priorities.Reset:Value() then
-						for charName, _ in pairs(self.EnemiesAdded) do
-							local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
-							self.Menu.Priorities[charName]:Value(priority);
+					if self.Loaded then
+						if self.Menu.Priorities.Reset:Value() then
+							for charName, _ in pairs(self.EnemiesAdded) do
+								local priority = self.Priorities[charName] ~= nil and self.Priorities[charName] or 1;
+								self.Menu.Priorities[charName]:Value(priority);
+							end
+							self.Menu.Priorities.Reset:Value(false);
 						end
-						self.Menu.Priorities.Reset:Value(false);
 					end
-				end
 			end });
 			]]
 		end
-
+		
 		self.Menu:MenuElement({ id = "Advanced", name = "Advanced", type = MENU });
 			self.Menu.Advanced:MenuElement({ id = "SelectedTarget", name = "Enable Select Target Manually", value = true });
 			self.Menu.Advanced:MenuElement({ id = "OnlySelectedTarget", name = "Only Attack Selected Target", value = false });
 			--TODO
-
+		
 		self.Menu:MenuElement({ id = "Drawings", name = "Drawings", type = MENU });
 			self.Menu.Drawings:MenuElement({ id = "SelectedTarget", name = "Draw circle around Selected Target", value = true });
 		
@@ -2482,7 +2531,7 @@ class "__TargetSelector"
 			end
 		end
 		if msg == KEY_DOWN then
-
+			
 		end
 	end
 
@@ -2572,31 +2621,31 @@ local ORBWALKER_TARGET_TYPE_STRUCTURE		= 4;
 class "__Orbwalker"
 	function __Orbwalker:__init()
 		self.Menu = MenuElement({ id = "IC's Orbwalker 2", name = "IC's Orbwalker", type = MENU });
-
+		
 		self.Loaded = false;
-
+		
 		self.Movement = true;
 		self.Attack = true;
-
+		
 		self.DamageOnMinions = {};
 		self.LastHitMinion = nil;
 		self.AlmostLastHitMinion = nil;
 		self.UnderTurretMinion = nil;
 		self.LaneClearMinion = nil;
 		self.StaticAutoAttackDamage = nil;
-
+		
 		self.EnemyStructures = {};
-
+		
 		self.AutoAttackSent = false;
 		self.LastAutoAttackSent = 0;
 		self.LastMovementSent = 0;
 		self.LastShouldWait = 0;
 		self.ForceTarget = nil;
 		self.ForceMovement = nil;
-
+		
 		self.IsNone = false;
 		self.OnlyLastHit = false;
-
+		
 		self.MyHeroIsAutoAttacking = false;
 		self.MyHeroEndTime = 0;
 		self.CustomEndTime = 0;
@@ -2607,15 +2656,19 @@ class "__Orbwalker"
 			["Garen"] = { 
 				["GarenQAttack"] = true 
 			},
+			["Kennen"] = { 
+				["KennenMegaProc"] = true 
+			},
+			
 			["Mordekaiser"] = { 
 				["MordekaiserQAttack"] = true,
 				["MordekaiserQAttack1"] = true,
-				["MordekaiserQAttack2"] = true,
+				["MordekaiserQAttack2"] = true
 			},
 			["TwistedFate"] = {
 				["BlueCardPreAttack"] = true,
 				["RedCardPreAttack"] = true,
-				["GoldCardPreAttack"] = true,
+				["GoldCardPreAttack"] = true
 			},
 			["XinZhao"] = { 
 				["XenZhaoThrust"] = true,
@@ -2623,13 +2676,13 @@ class "__Orbwalker"
 				["XenZhaoThrust3"] = true,
 			},
 		}
-
+		
 		self.MyHeroAttacks = {};
-
+		
 		self.FastKiting = false;
 		self.AutoAttackResetted = false;
 		self.AutoAttackResetCastTime = 0;
-
+		
 		self.MenuKeys = {
 			[ORBWALKER_MODE_COMBO] = {},
 			[ORBWALKER_MODE_HARASS] = {},
@@ -2638,7 +2691,7 @@ class "__Orbwalker"
 			[ORBWALKER_MODE_LASTHIT] = {},
 			[ORBWALKER_MODE_FLEE] = {},
 		};
-
+		
 		self.Modes = {
 			[ORBWALKER_MODE_COMBO] = false,
 			[ORBWALKER_MODE_HARASS] = false,
@@ -2647,24 +2700,24 @@ class "__Orbwalker"
 			[ORBWALKER_MODE_LASTHIT] = false,
 			[ORBWALKER_MODE_FLEE] = false,
 		};
-
+		
 		self.OnUnkillableMinionCallbacks = {};
 		self.OnPreAttackCallbacks = {};
 		self.OnPreMovementCallbacks = {};
 		self.OnAttackCallbacks = {};
 		self.OnPostAttackCallbacks = {};
-
+		
 		self.HoldPosition = nil;
 		self.LastHoldPosition = 0;
-
+		
 		self.LastMinionHealth = {};
 		self.LastMinionDraw = {};
-
+		
 		self.AttackDataWindUpTime = 0;
 		self.SpellWindUpTime = 0;
 		self.AttackDataAnimationTime = 0;
 		self.SpellAnimationTime = 0;
-
+		
 		self.AllowMovement = {
 			["Lucian"] = function(unit)
 				return BuffManager:HasBuff(unit, "LucianR");
@@ -2720,7 +2773,7 @@ class "__Orbwalker"
 			["Zilean"]			= true,
 			["Zyra"]			= true,
 		};
-
+		
 		self.AutoAttackResets = {
 			["Blitzcrank"] = { Slot = _E, toggle = true },
 			["Camille"] = { Slot = _Q },
@@ -2743,7 +2796,7 @@ class "__Orbwalker"
 			["Mordekaiser"] = { Slot = _Q, toggle = true },
 			["Nautilus"] = { Slot = _W },
 			["Nidalee"] = { Slot = _Q, Name = "Takedown", toggle = true },
-			["Nasus"] = { Slot = _Q, toggle = true  },
+			["Nasus"] = { Slot = _Q, toggle = true },
 			["RekSai"] = { Slot = _Q, Name = "RekSaiQ" },
 			["Renekton"] = { Slot = _W, toggle = true },
 			["Rengar"] = { Slot = _Q },
@@ -2758,7 +2811,7 @@ class "__Orbwalker"
 			["XinZhao"] = { Slot = _Q, toggle = true },
 			["Yorick"] = { Slot = _Q, toggle = true },
 		};
-
+		
 		self.TargetByType = {
 			[ORBWALKER_TARGET_TYPE_HERO] = function()
 				return TargetSelector:GetTarget(ObjectManager:GetEnemyHeroesInAutoAttackRange(), DAMAGE_TYPE_PHYSICAL);
@@ -2818,7 +2871,7 @@ class "__Orbwalker"
 				return nil;
 			end,
 		};
-
+		
 		LocalCallbackAdd('Load', function()
 			self:OnLoad();
 		end);
@@ -2833,10 +2886,10 @@ class "__Orbwalker"
 				end
 			end
 		end
-
-
+		
+		
 		self.Menu:MenuElement({ id = "Enabled", name = "Enabled", value = true });
-			
+		
 		self.Menu:MenuElement({ id = "Keys", name = "Keys Settings", type = MENU });
 			self.Menu.Keys:MenuElement({ id = "Combo", name = "Combo", key = string.byte(" ") });
 			self:RegisterMenuKey(ORBWALKER_MODE_COMBO, self.Menu.Keys.Combo);
@@ -2850,8 +2903,12 @@ class "__Orbwalker"
 			self:RegisterMenuKey(ORBWALKER_MODE_LASTHIT, self.Menu.Keys.LastHit);
 			self.Menu.Keys:MenuElement({ id = "Flee", name = "Flee", key = string.byte("T") });
 			self:RegisterMenuKey(ORBWALKER_MODE_FLEE, self.Menu.Keys.Flee);
-
+			self.Menu.Keys:MenuElement({ id = "HoldPosButton", name = "Hold position button", key = string.byte("H"), tooltip = "Should be same in game keybinds", onKeyChange = function(kb) HoldPositionButton = kb; end });
+		
 		self.Menu:MenuElement({ id = "General", name = "General Settings", type = MENU });
+			self.Menu.General:MenuElement({ id = "AttackTargetKeyUse", name = "Use evtPlayerAttackOnlyClick", value = false, tooltip = "You should bind this one in ingame settings", callback = function(cb) UseAttackTargetBind = cb; end });
+			self.Menu.General:MenuElement({ id = "AttackTKey", name = "Attack target key", key = string.byte("6"), tooltip = "Should be same in game keybind", onKeyChange = function(kb) AttackTargetKeybind = kb; end });
+			self.Menu.General:MenuElement({ id = "AttackResetting", name = "Auto attack reset fix [test]", value = false, tooltip = "Can be bugged so enable at your own risk" });
 			self.Menu.General:MenuElement({ id = "FastKiting", name = "Fast Kiting", value = true });
 			self.Menu.General:MenuElement({ id = "LaneClearHeroes", name = "Attack heroes in Lane Clear mode", value = true });
 			self.Menu.General:MenuElement({ id = "StickToTarget", name = "Stick to target (only melee)", value = true });
@@ -2859,19 +2916,19 @@ class "__Orbwalker"
 			self.Menu.General:MenuElement({ id = "SupportMode." .. myHero.charName, name = "Support Mode", value = self.SupportHeroes[myHero.charName] ~= nil });
 			self.Menu.General:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = 120, min = 100, max = 250, step = 10 });
 			self.Menu.General:MenuElement({ id = "ExtraWindUpTime", name = "Extra WindUpTime", value = 0, min = 0, max = 200, step = 20 });
-
+		
 		self.Menu:MenuElement({ id = "Farming", name = "Farming Settings", type = MENU });
 			self.Menu.Farming:MenuElement({ id = "LastHitPriority", name = "Priorize Last Hit over Harass", value = true });
 			self.Menu.Farming:MenuElement({ id = "PushPriority", name = "Priorize Push over Freeze", value = true });
 			self.Menu.Farming:MenuElement({ id = "ExtraFarmDelay", name = "ExtraFarmDelay", value = 0, min = -80, max = 80, step = 10 });
 			self.Menu.Farming:MenuElement({ id = "Tiamat", name = "Use Tiamat/Hydra on unkillable minions", value = true });
-
+		
 		self.Menu:MenuElement({ id = "Drawings", name = "Drawings Settings", type = MENU });
 			self.Menu.Drawings:MenuElement({ id = "Range", name = "AutoAttack Range", value = true });
 			self.Menu.Drawings:MenuElement({ id = "EnemyRange", name = "Enemy AutoAttack Range", value = true });
 			self.Menu.Drawings:MenuElement({ id = "HoldRadius", name = "Hold Radius", value = false });
 			self.Menu.Drawings:MenuElement({ id = "LastHittableMinions", name = "Last Hittable Minions", value = true });
-
+		
 		LocalCallbackAdd('Tick', function()
 			if not self:IsEnabled() then
 				return;
@@ -2884,7 +2941,10 @@ class "__Orbwalker"
 			end
 			self:OnDraw();
 		end);
-
+		UseAttackTargetBind = self.Menu.General.AttackTargetKeyUse:Value();
+		AttackTargetKeybind = self.Menu.General.AttackTKey:Key();
+		HoldPositionButton = self.Menu.Keys.HoldPosButton:Key();
+		self.winddowntimer = 0;
 		self.Loaded = true;
 	end
 
@@ -2906,14 +2966,13 @@ class "__Orbwalker"
 
 	function __Orbwalker:OnUpdate()
 		local CurrentTime = LocalGameTimer();
-
 		if Utilities:IsAutoAttacking(myHero) then
 			self.AttackDataWindUpTime = Utilities:GetAttackDataWindUpTime(myHero);
 			self.SpellWindUpTime = Utilities:GetActiveSpellWindUpTime(myHero);
 			self.AttackDataAnimationTime = Utilities:GetAttackDataAnimationTime(myHero);
 			self.SpellAnimationTime = Utilities:GetActiveSpellAnimationTime(myHero);
 		end
-
+		
 		local SpecialAutoAttacks = self.SpecialAutoAttacks[myHero.charName];
 		if SpecialAutoAttacks ~= nil then
 			if Utilities:IsCastingSpell(myHero) and SpecialAutoAttacks[Utilities:GetActiveSpellName(myHero)] ~= nil then
@@ -2922,7 +2981,7 @@ class "__Orbwalker"
 				end
 			end
 		end
-
+		
 		local AutoAttackReset = self.AutoAttackResets[myHero.charName];
 		if AutoAttackReset ~= nil then
 			local spellData = Utilities:GetSpellDataFromSlot(myHero, AutoAttackReset.Slot);
@@ -2937,45 +2996,49 @@ class "__Orbwalker"
 				self.AutoAttackResetCastTime = castTime;
 			end
 		end
-
+		
 		local endTime = self:GetAttackDataEndTime(myHero);
 		if self.MyHeroEndTime < endTime then
 			self:__OnAttack();
 		end
 		self.MyHeroEndTime = endTime;
-
+		
 		local IsAutoAttacking = self:IsAutoAttacking(myHero);
 		if not IsAutoAttacking then
 			if self.MyHeroIsAutoAttacking then
-				self:__OnPostAttack();
+				if self.Menu.General.AttackResetting:Value() and self.winddowntimer > LocalGameTimer() and myHero.charName ~= "Jinx" then 
+					self:__OnAutoAttackReset();
+				else
+					self:__OnPostAttack();
+				end
 			end
 		end
 		self.MyHeroIsAutoAttacking = IsAutoAttacking;
-
+		
 		self:Clear();
 		self.Modes = self:GetModes();
 		self.IsNone = self:HasMode(ORBWALKER_MODE_NONE);
 		--[[
-			for i = 1, #self.MyHeroAttacks do
-				if self.MyHeroAttacks[i]:ShouldRemove() then
-					table.remove(self.MyHeroAttacks, i);
-					break;
-				end
+		for i = 1, #self.MyHeroAttacks do
+			if self.MyHeroAttacks[i]:ShouldRemove() then
+				table.remove(self.MyHeroAttacks, i);
+				break;
 			end
+		end
 		]]
-
+		
 		if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
 			self.OnlyLastHit = (not self.Modes[ORBWALKER_MODE_LANECLEAR]);
 			if (not self.IsNone) or self.Menu.Drawings.LastHittableMinions:Value() then
 				self:CalculateLastHittableMinions();
 			end
 		end
-
+		
 		if (not self.IsNone) then
 			self:Orbwalk();
 		end
 		if self.LastHoldPosition > 0 and CurrentTime - self.LastHoldPosition > 0.025 then
-			LocalControlKeyUp(72);
+			LocalControlKeyUp(HoldPositionButton);
 			self.LastHoldPosition = 0;
 		end
 	end
@@ -3012,8 +3075,9 @@ class "__Orbwalker"
 		if LocalGameIsChatOpen() or (not LocalGameIsOnTop()) then
 			return;
 		end
-
+		
 		if self.Attack and self:CanAttack() then
+			
 			local target = self:GetTarget();
 			if target ~= nil then
 				local args = {
@@ -3042,6 +3106,13 @@ class "__Orbwalker"
 		if (not self.Movement) or (not self:CanMove()) then
 			return;
 		end
+		
+		local canattack,canmove = Utilities:CanControl()
+		if (not canmove) then
+			return 
+		end 
+		
+		
 		local CurrentTime = LocalGameTimer();
 		if CurrentTime - self.LastMovementSent <= self.Menu.General.MovementDelay:Value() * 0.001 then
 			if self.Menu.General.FastKiting:Value() then
@@ -3093,14 +3164,14 @@ class "__Orbwalker"
 		end
 		if hold then
 			if self.HoldPosition == nil or (not (self.HoldPosition == myHero.pos)) then
-				LocalControlKeyDown(72);
+				LocalControlKeyDown(HoldPositionButton);
 				self.HoldPosition = myHero.pos;
 				self.LastHoldPosition = CurrentTime;
 			end
 		end
 	end
 
-	function __Orbwalker:OnDraw()
+	function __Orbwalker:OnDraw()	
 		if self.Menu.Drawings.Range:Value() then
 			LocalDrawCircle(myHero.pos, Utilities:GetAutoAttackRange(myHero), 2, COLOR_LIGHT_GREEN);
 		end
@@ -3142,7 +3213,7 @@ class "__Orbwalker"
 				end
 			end
 		end
-
+		
 		local tempLastMinionHealth = {};
 		if nearestTurret ~= nil then
 			local EnemyMinionsInRange = ObjectManager:GetEnemyMinions();
@@ -3159,7 +3230,7 @@ class "__Orbwalker"
 			end
 		end
 		self.LastMinionHealth = tempLastMinionHealth;
-
+		
 		
 		local enemies = {};
 		local t = ObjectManager:GetEnemyHeroes(1500);
@@ -3170,7 +3241,7 @@ class "__Orbwalker"
 		local t = ObjectManager:GetEnemyMinions(1500);
 		for i = 1, #t do
 			local enemy = t[i];
-			enemies[enemy.handle] = enemy;  
+			enemies[enemy.handle] = enemy; 
 		end
 		local CurrentTime = LocalGameTimer();
 		local counter = 0;
@@ -3290,7 +3361,11 @@ class "__Orbwalker"
 	function __Orbwalker:IsAutoAttacking(unit)
 		local ExtraWindUpTime = self.Menu.General.ExtraWindUpTime:Value() * 0.001;
 		local endTime = self:GetAttackDataEndTime(unit) - self:GetAnimationTime(unit) + self:GetWindUpTime(unit) + ExtraWindUpTime;
-		return LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0;
+		local isattacking = LocalGameTimer() - endTime + self:GetMovementOrderDelay() < 0 and Utilities:IsAutoAttacking(unit)
+		if isattacking and (not self.winddowntimer or self.winddowntimer < LocalGameTimer()) then
+			self.winddowntimer = endTime
+		end
+		return isattacking;
 	end
 
 	function __Orbwalker:GetMaximumIssueOrderDelay()
@@ -3300,7 +3375,7 @@ class "__Orbwalker"
 	function __Orbwalker:IsWaitingResponseFromServer()
 		return self.AutoAttackSent and LocalGameTimer() - self.LastAutoAttackSent <= self:GetMaximumIssueOrderDelay();
 	end
-	
+
 	function __Orbwalker:CanMove(unit)
 		unit = self:GetUnit(unit);
 		if unit.isMe then
@@ -3315,22 +3390,26 @@ class "__Orbwalker"
 			if self.AllowMovement[unit.charName] == nil or (not self.AllowMovement[unit.charName](unit)) then
 				return false;
 			end
-		--elseif Utilities:IsCastingSpell(unit) then
-		--	if not Utilities:IsAutoAttacking(unit) then
-		--		return false;
-		--	end
+			--elseif Utilities:IsCastingSpell(unit) then
+			--	if not Utilities:IsAutoAttacking(unit) then
+			--		return false;
+			--	end
 		end
 		return not self:IsAutoAttacking(unit);
 	end
 
 	function __Orbwalker:CanAttack(unit)
 		unit = self:GetUnit(unit);
+		local canattack,canmove = Utilities:CanControl()
+		if (not canattack) then
+			return 
+		end 
 		if Utilities:IsChanneling(unit) then
 			return false;
-		--elseif Utilities:IsCastingSpell(unit) then
-		--	if not Utilities:IsAutoAttacking(unit) then
-		--		return false;
-		--	end
+			--elseif Utilities:IsCastingSpell(unit) then
+			--	if not Utilities:IsAutoAttacking(unit) then
+			--		return false;
+			--	end
 		end
 		if self.DisableAutoAttack[unit.charName] ~= nil and self.DisableAutoAttack[unit.charName](unit) then
 			return false;
@@ -3393,42 +3472,42 @@ class "__Orbwalker"
 			return nil;
 		end
 		local potentialTargets = {};
-
+		
 		local LaneClearHeroes = self.Menu.General.LaneClearHeroes:Value();
-
+		
 		local hero = nil;
 		if self.Modes[ORBWALKER_MODE_COMBO] or self.Modes[ORBWALKER_MODE_HARASS] or (self.Modes[ORBWALKER_MODE_LANECLEAR] and LaneClearHeroes) then
 			hero = self:GetTargetByType(ORBWALKER_TARGET_TYPE_HERO);
 		end
-
+		
 		local laneMinion = nil;
 		if self.Modes[ORBWALKER_MODE_HARASS] or self.Modes[ORBWALKER_MODE_LANECLEAR] or self.Modes[ORBWALKER_MODE_LASTHIT] then
 			laneMinion = self:GetTargetByType(ORBWALKER_TARGET_TYPE_LANE_MINION);
 		end
-
+		
 		local otherMinion = nil;
 		local otherMinionIsLastHittable = false;
 		if self.Modes[ORBWALKER_MODE_LANECLEAR] or self.Modes[ORBWALKER_MODE_LASTHIT] or self.Modes[ORBWALKER_MODE_JUNGLECLEAR] then
 			otherMinion = self:GetTargetByType(ORBWALKER_TARGET_TYPE_OTHER_MINION);
 			otherMinionIsLastHittable = otherMinion ~= nil and otherMinion.health <= 1;
 		end
-
+		
 		local monster = nil
 		if self.Modes[ORBWALKER_MODE_JUNGLECLEAR] then
 			monster = self:GetTargetByType(ORBWALKER_TARGET_TYPE_MONSTER);
 		end
-
+		
 		local structure = nil;
 		if self.Modes[ORBWALKER_MODE_HARASS] or self.Modes[ORBWALKER_MODE_LANECLEAR] then
 			structure = self:GetTargetByType(ORBWALKER_TARGET_TYPE_STRUCTURE);
 		end
-
+		
 		local LastHitPriority = self.Menu.Farming.LastHitPriority:Value();
-
+		
 		if self.Modes[ORBWALKER_MODE_COMBO] then
 			Linq:Add(potentialTargets, hero);
 		end
-
+		
 		if self.Modes[ORBWALKER_MODE_HARASS] then
 			if structure ~= nil then
 				if not LastHitPriority then
@@ -3486,7 +3565,7 @@ class "__Orbwalker"
 				Linq:Add(potentialTargets, otherMinion);
 			end
 		end
-
+		
 		for i = 1, #potentialTargets do
 			local target = potentialTargets[i];
 			if target ~= nil then
@@ -3556,16 +3635,16 @@ class "__Orbwalker"
 				end
 			end
 		end
-
+		
 		local EnemyMinions = ObjectManager:GetEnemyMinions(1500);
 		local EnemyMinionsInAutoAttackRange = {};
-
+		
 		local IsUnderTurret = {};
 		local UnderTurretMinions = {};
 		local UnderTurretMinionsHash = {};
 		local CachedDistanceSquared = {};
 		local AutoAttackArrivals = {};
-
+		
 		for i = 1, #EnemyMinions do
 			local EnemyMinion = EnemyMinions[i];
 			if Utilities:IsInAutoAttackRange(myHero, EnemyMinion) then
@@ -3585,7 +3664,7 @@ class "__Orbwalker"
 			end
 			AutoAttackArrivals[EnemyMinion.networkID] = {};
 		end
-
+		
 		local UnkillableMinions = {};
 		local LastHitMinions = {};
 		local AlmostLastHitMinions = {};
@@ -3611,7 +3690,7 @@ class "__Orbwalker"
 				orbwalkerMinion.LaneClearHealth = orbwalkerMinion.LaneClearHealth - HealthPrediction.AlliesSearchingTargetDamage[EnemyMinion.networkID];
 			end
 		end
-
+		
 		for _, attacks in pairs(HealthPrediction.IncomingAttacks) do
 			for i = 1, #attacks do
 				local attack = attacks[i];
@@ -3622,7 +3701,7 @@ class "__Orbwalker"
 				end
 			end
 		end
-
+		
 		local NotLastHittableMinionsUnderTurret = {};
 		local AlmostLastHitMinionsUnderTurret = {};
 		local LaneClearMinionsUnderTurret = {};
@@ -3647,13 +3726,13 @@ class "__Orbwalker"
 				end
 			end
 		end
-
+		
 		local CurrentTime = LocalGameTimer();
-
+		
 		if nearestTurret ~= nil then
 			local AllyMinions = ObjectManager:GetAllyMinions(1500);
 			local AllyMinionsTarget = {};
-
+			
 			for i = 1, #AllyMinions do
 				local AllyMinion = AllyMinions[i];
 				local AllyTarget = Utilities:GetAttackDataTarget(AllyMinion);
@@ -3695,7 +3774,7 @@ class "__Orbwalker"
 				end
 				MinionsPriority[EnemyMinion.networkID] = Priority;
 			end
-
+			
 			LocalTableSort(UnderTurretMinions, function(a, b)
 				if MinionsPriority[a.networkID] == MinionsPriority[b.networkID] then
 					if a.maxHealth == b.maxHealth then
@@ -3707,7 +3786,7 @@ class "__Orbwalker"
 					return MinionsPriority[a.networkID] > MinionsPriority[b.networkID];
 				end
 			end);
-
+			
 			local turretProjectileSpeed = Utilities:GetAttackDataProjectileSpeed(nearestTurret); 
 			local turretWindUpTime = Utilities:GetAttackDataWindUpTime(nearestTurret);
 			local turretAnimationTime = Utilities:GetAttackDataAnimationTime(nearestTurret);
@@ -3730,7 +3809,7 @@ class "__Orbwalker"
 					turretDamage = Damage:GetAutoAttackDamage(nearestTurret, EnemyMinion);
 					turretMissileTravelTime = Utilities:GetDistance(nearestTurret, EnemyMinion) / turretProjectileSpeed;
 				end
-
+				
 				turretMinionHealth = turretMinionHealth - turretDamage;
 				Linq:Add(AutoAttackArrivals[EnemyMinion.networkID], { networkID = nearestTurret.networkID, ArrivalTime = turretNextAutoAttackArrival + turretWindUpTime + turretMissileTravelTime, Damage = turretDamage });
 				if turretMinionHealth <= 0 then
@@ -3738,7 +3817,7 @@ class "__Orbwalker"
 				end
 				turretNextAutoAttackArrival = turretNextAutoAttackArrival + turretAnimationTime;
 			end
-
+			
 			for i = 1, #UnderTurretMinions do
 				local EnemyMinion = UnderTurretMinions[i];
 				local EnemyMinionHealth = EnemyMinion.health;
@@ -3810,12 +3889,12 @@ class "__Orbwalker"
 				end
 			end
 		end
-
-
+		
+		
 		LocalTableSort(UnkillableMinions, function(a, b)
 			return a.LastHitHealth < b.LastHitHealth;
 		end);
-
+		
 		LocalTableSort(LastHitMinions, function(a, b)
 			if a.Minion.maxHealth == b.Minion.maxHealth then
 				return a.LastHitHealth < b.LastHitHealth;
@@ -3827,7 +3906,7 @@ class "__Orbwalker"
 			self.LastHitMinion = LastHitMinions[i].Minion;
 			break;
 		end
-
+		
 		LocalTableSort(AlmostLastHitMinionsUnderTurret, function(a, b)
 			if a.Minion.maxHealth == b.Minion.maxHealth then
 				return a.LaneClearHealth < b.LaneClearHealth;
@@ -3842,17 +3921,17 @@ class "__Orbwalker"
 				return a.Minion.maxHealth > b.Minion.maxHealth;
 			end
 		end);
-
+		
 		local JoinedAlmostLastHitMinions = Linq:Join(AlmostLastHitMinionsUnderTurret, AlmostLastHitMinions);
 		for i = 1, #JoinedAlmostLastHitMinions do
 			self.AlmostLastHitMinion = JoinedAlmostLastHitMinions[i].Minion;
 			break;
 		end
-
+		
 		if self.AlmostLastHitMinion ~= nil then
 			self.LastShouldWait = CurrentTime;
 		end
-
+		
 		local PushPriority = self.Menu.Farming.PushPriority:Value();
 		LocalTableSort(LaneClearMinionsUnderTurret, function(a, b)
 			if PushPriority then
@@ -3868,7 +3947,7 @@ class "__Orbwalker"
 				return a.LaneClearHealth > b.LaneClearHealth;
 			end
 		end);
-
+		
 		local JoinedLaneClearMinions = Linq:Join(LaneClearMinionsUnderTurret, LaneClearMinions);
 		for i = 1, #JoinedLaneClearMinions do
 			self.LaneClearMinion = JoinedLaneClearMinions[i].Minion;
@@ -3956,9 +4035,9 @@ class "__OrbwalkerMinion"
 		end
 		local percentMod = 2;
 		if false --[[TODO]] then
-			percentMod = percentMod * 2;
-		end
-		return self.LaneClearHealth - percentMod * Orbwalker:GetAutoAttackDamage(self.Minion) > 0;
+		percentMod = percentMod * 2;
+	end
+	return self.LaneClearHealth - percentMod * Orbwalker:GetAutoAttackDamage(self.Minion) > 0;
 	end
 
 
