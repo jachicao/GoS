@@ -232,6 +232,7 @@ end);
 
 local AttackTargetKeybind = nil;
 local UseAttackTargetBind = false;
+local HoldPositionButton = nil;
 local ControlOrder = nil;
 local CONTROL_TYPE_ATTACK			= 1;
 local CONTROL_TYPE_MOVE				= 2;
