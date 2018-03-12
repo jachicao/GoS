@@ -1042,6 +1042,9 @@ class "__Utilities"
 			["Janna"] = function(unit)
 				return BuffManager:HasBuff(unit, "ReapTheWhirlwind");
 			end,
+			["Kaisa"] = function(unit)
+				return BuffManager:HasBuff(unit, "KaisaE");
+			end,
 			["Karthus"] = function(unit)
 				return BuffManager:HasBuff(unit, "karthusfallenonecastsound");
 			end,
@@ -2720,6 +2723,9 @@ class "__Orbwalker"
 		self.SpellAnimationTime = 0;
 		
 		self.AllowMovement = {
+			["Kaisa"] = function(unit)
+				return BuffManager:HasBuff(unit, "KaisaE");
+			end,
 			["Lucian"] = function(unit)
 				return BuffManager:HasBuff(unit, "LucianR");
 			end,
