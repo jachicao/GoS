@@ -1191,6 +1191,7 @@ class "__Utilities"
 			["MordekaiserQAttack"] = true,
 			["MordekaiserQAttack1"] = true,
 			["MordekaiserQAttack2"] = true,
+			["QuinnWEnhanced"] = true,
 			["XenZhaoThrust"] = true,
 			["XenZhaoThrust2"] = true,
 			["XenZhaoThrust3"] = true,
@@ -1298,6 +1299,9 @@ class "__Utilities"
 	end
 
 	function __Utilities:CanControl()
+	if ExtLibEvade and ExtLibEvade.Evading then
+		return false, false
+	end
 		local canattack,canmove = true,true
 		for i = 0, myHero.buffCount do
 			local buff = myHero:GetBuff(i);
@@ -1505,6 +1509,10 @@ class "__Utilities"
 		if EnemiesInGame["Kayle"] and BuffManager:HasBuff(target, "JudicatorIntervention") then
 			return true;
 		end
+		if EnemiesInGame["Taric"] and BuffManager:HasBuff(target, "TaricR") then
+			return true;
+		end
+
 		if EnemiesInGame["Kindred"] and BuffManager:HasBuff(target, "kindredrnodeathbuff") and (not addHealthCheck or self:GetHealthPercent(target) <= 10) then
 			return true;
 		end
@@ -2668,6 +2676,9 @@ class "__Orbwalker"
 				["MordekaiserQAttack"] = true,
 				["MordekaiserQAttack1"] = true,
 				["MordekaiserQAttack2"] = true
+			},
+			["Quinn"] = {
+				["QuinnWEnhanced"] = true
 			},
 			["TwistedFate"] = {
 				["BlueCardPreAttack"] = true,
@@ -4023,7 +4034,7 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsLastHittable()
-		return self.LastHitHealth <= Orbwalker:GetAutoAttackDamage(self.Minion);
+		return self.LastHitHealth <= Orbwalker:GetAutoAttackDamage(self.Minion)-5; -- IT HURTS Basic attacks no longer deal 5 bonus damage to lane minions 8.4
 	end
 
 	function __OrbwalkerMinion:IsAlmostLastHittable(IsUnderTurret)
