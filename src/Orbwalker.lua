@@ -903,7 +903,7 @@ class "__Damage"
 		end
 		
 		local flatReceived = 0;
-		if fromIsMinion and targetIsMinion then
+		if not isAbility and targetIsMinion then
 			flatReceived = flatReceived - target.flatDamageReduction;
 		end
 		
@@ -4034,7 +4034,7 @@ class "__OrbwalkerMinion"
 	end
 
 	function __OrbwalkerMinion:IsLastHittable()
-		return self.LastHitHealth <= Orbwalker:GetAutoAttackDamage(self.Minion)-5; -- IT HURTS Basic attacks no longer deal 5 bonus damage to lane minions 8.4
+		return self.LastHitHealth <= Orbwalker:GetAutoAttackDamage(self.Minion);
 	end
 
 	function __OrbwalkerMinion:IsAlmostLastHittable(IsUnderTurret)
