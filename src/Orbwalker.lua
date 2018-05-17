@@ -723,6 +723,11 @@ class "__Damage"
 					args.RawPhysical = args.RawPhysical + LocalMathMin(0.25, 0.1 + 0.05 * LocalMathCeil(Utilities:GetLevel(args.From) / 5)) * (args.Target.maxHealth - args.Target.health);
 				end
 			end,
+			["Lux"] = function(args)
+				if BuffManager:HasBuff(args.Target, "LuxIlluminatingFraulein") then
+					args.RawMagical = 20 + args.From.levelData.lvl * 10 + args.From.ap * 0.2;
+				end
+			end,
 			["Orianna"] = function(args)
 				local level = LocalMathCeil(Utilities:GetLevel(args.From) / 3);
 				args.RawMagical = args.RawMagical + 2 + 8 * level + 0.15 * args.From.ap;
@@ -1197,7 +1202,10 @@ class "__Utilities"
 			["XenZhaoThrust3"] = true,
 			["BlueCardPreAttack"] = true,
 			["RedCardPreAttack"] = true,
-			["GoldCardPreAttack"] = true
+			["GoldCardPreAttack"] = true,
+			["ViktorQBuff"] = true,
+			["MasterYiDoubleStrike"] = true,
+			["QuinnWEnhanced"] = true,
 		};
 		
 		self.NoAutoAttacks = {
@@ -1328,7 +1336,7 @@ class "__Utilities"
 		end
 		return canattack,canmove
 	end
-	function __Utilities:__GetAutoAttackRange(from)
+	function __Utilities:__GetAutoAttackRange(from)		
 		local range = from.range;
 		if from.type == Obj_AI_Minion then
 			range = self.MinionsRange[from.charName] ~= nil and self.MinionsRange[from.charName] or 0;
@@ -1701,8 +1709,9 @@ class "__ObjectManager"
 				end
 			end
 		end
+		
 	end
-
+	
 	function __ObjectManager:GetMinionType(minion)
 		if Utilities:IsMonster(minion) then
 			return MINION_TYPE_MONSTER;
@@ -2854,6 +2863,8 @@ class "__Orbwalker"
 					end
 				end
 				if (not SupportMode) or (BuffManager:GetBuffCount(myHero, "TalentReaper") > 0) then
+					--List of ignore minions that champion scripts have already cast skill on.
+					
 					if self.LastHitMinion ~= nil then
 						if self.AlmostLastHitMinion ~= nil and not Utilities:IdEquals(self.AlmostLastHitMinion, self.LastHitMinion) and Utilities:IsSiegeMinion(self.AlmostLastHitMinion) then
 							return nil;
@@ -3001,10 +3012,10 @@ class "__Orbwalker"
 		end
 		
 		local AutoAttackReset = self.AutoAttackResets[myHero.charName];
-		if AutoAttackReset ~= nil then
+		if AutoAttackReset ~= nil and self.Menu.General.AttackResetting:Value() then
 			local spellData = Utilities:GetSpellDataFromSlot(myHero, AutoAttackReset.Slot);
 			local castTime = spellData.castTime;
-			if castTime > self.AutoAttackResetCastTime and (not AutoAttackReset.toggle or spellData.currentCd < 0.5) then
+			if castTime > self.AutoAttackResetCastTime and (not AutoAttackReset.toggle or spellData.currentCd < 0.5) then				
 				if self.AutoAttackResetCastTime > 0 then
 					local name = AutoAttackReset["Name"];
 					if name == nil or name == spellData.name then
@@ -3052,7 +3063,7 @@ class "__Orbwalker"
 			end
 		end
 		
-		if (not self.IsNone) then
+		if (not self.IsNone) then		
 			self:Orbwalk();
 		end
 		if self.LastHoldPosition > 0 and CurrentTime - self.LastHoldPosition > 0.025 then
@@ -3095,7 +3106,6 @@ class "__Orbwalker"
 		end
 		
 		if self.Attack and self:CanAttack() then
-			
 			local target = self:GetTarget();
 			if target ~= nil then
 				local args = {
@@ -3636,7 +3646,7 @@ class "__Orbwalker"
 			[ORBWALKER_MODE_FLEE] 			= self:HasMode(ORBWALKER_MODE_FLEE),
 		};
 	end
-
+	
 	function __Orbwalker:CalculateLastHittableMinions()
 		local allyTurrets = ObjectManager:GetAllyTurrets();
 		local nearestTurret = nil;
