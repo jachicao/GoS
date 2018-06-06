@@ -209,8 +209,17 @@ local LoadCallbacks = {};
 _G.AddLoadCallback = function(cb)
 	LocalTableInsert(LoadCallbacks, cb);
 end
+	
+LocalCallbackAdd('Load', function() OnGameStart() end)
 
-LocalCallbackAdd('Load', function()
+--Test fix to stop the load event from firing before the game has loaded all required data
+function OnGameStart()
+	if Game.Timer() < 30 then
+		DelayAction(function ()
+			OnGameStart()
+		end, 30 - Game.Timer())
+		return
+	end
 	local Loaded = false;
 	myHero = _G.myHero;
 	local id = LocalCallbackAdd('Tick', function()
@@ -228,7 +237,7 @@ LocalCallbackAdd('Load', function()
 			end
 		end
 	end);
-end);
+end
 
 local AttackTargetKeybind = nil;
 local UseAttackTargetBind = false;
@@ -2467,13 +2476,7 @@ class "__TargetSelector"
 		end);
 	end
 
-	function __TargetSelector:OnLoad()
-		if Game.Timer() < 30 then
-			DelayAction(function ()
-				self:OnLoad();
-			end, 30 - Game.Timer())
-			return
-		end
+	function __TargetSelector:OnLoad()		
 		self.Menu:MenuElement({ id = "Mode", name = "Mode", value = 1, drop = self.Modes });
 		self.Menu:MenuElement({ id = "Priorities", name = "Priorities", type = MENU });
 		local EnemyHeroes = {};
