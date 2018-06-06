@@ -2468,6 +2468,12 @@ class "__TargetSelector"
 	end
 
 	function __TargetSelector:OnLoad()
+		if Game.Timer() < 30 then
+			DelayAction(function ()
+				self:OnLoad();
+			end, 30 - Game.Timer())
+			return
+		end
 		self.Menu:MenuElement({ id = "Mode", name = "Mode", value = 1, drop = self.Modes });
 		self.Menu:MenuElement({ id = "Priorities", name = "Priorities", type = MENU });
 		local EnemyHeroes = {};
